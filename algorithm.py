@@ -1,10 +1,10 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from math import asin, cos, radians, sin, sqrt
-from typing import Iterable
+import math
+from html import escape
 
 import numpy as np
 import pandas as pd
@@ -33,7 +33,14 @@ GROUP_CENTERS = {
     "D3": (38.635, 29.435), "D4": (38.635, 29.460),
 }
 
-def generate_pharmacies(seed: int = 42, total: int = 104) -> pd.DataFrame:
+REGION_COLORS = {
+    "A": "#2563EB",
+    "B": "#16A34A",
+    "C": "#F59E0B",
+    "D": "#7C3AED",
+}
+
+def generate_pharmacies(seed: int = 42, total: int = 112) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     rows = []
     pid = 1
@@ -41,13 +48,12 @@ def generate_pharmacies(seed: int = 42, total: int = 104) -> pd.DataFrame:
 
     for group in GROUPS:
         center_lat, center_lon = GROUP_CENTERS[group]
-        count = per_group
 
-        for _ in range(count):
+        for _ in range(per_group):
             rows.append(
                 {
                     "pharmacy_id": pid,
-                    "pharmacy_name": f"Eczane {pid:03d}",
+                    "pharmacy_name": f"Eczane {pid}",
                     "group": group,
                     "region": group[0],
                     "lat": center_lat + rng.normal(0, 0.006),
@@ -100,11 +106,11 @@ def group_for_day(day_index: int) -> tuple[str, str, str, str]:
 
 def status_palette() -> dict[str, list[int]]:
     return {
-        "selected": [29, 78, 216, 230],
-        "selectable": [22, 163, 74, 210],
-        "distance_blocked": [220, 38, 38, 210],
-        "gap_blocked": [245, 158, 11, 215],
-        "inactive": [124, 58, 237, 85],
+        "selected": [29, 78, 216, 235],
+        "selectable": [22, 163, 74, 215],
+        "distance_blocked": [220, 38, 38, 215],
+        "gap_blocked": [245, 158, 11, 220],
+        "inactive": [124, 58, 237, 80],
     }
 
 def eligible_candidates(
@@ -117,7 +123,6 @@ def eligible_candidates(
     min_gap_days: int,
 ) -> pd.DataFrame:
     candidates = pharmacies[pharmacies["group"] == group_name].copy()
-
     selected_rows = pharmacies[pharmacies["pharmacy_id"].isin(selected_ids)]
 
     statuses = []
@@ -181,45 +186,119 @@ def eligible_candidates(
 
     return candidates
 
-def build_demo_schedule(
+def build_group_svg(
     pharmacies: pd.DataFrame,
-    start_date: date,
-    days: int,
-    min_distance_km: float = 1.0,
-    min_gap_days: int = 14,
-) -> pd.DataFrame:
-    state = SimulationState.from_dataframe(pharmacies, reference_date=start_date)
-    rows = []
+    active_combo: tuple[str, str, str, str],
+    selected_by_group: dict[str, int],
+) -> str:
+    width, height = 1100, 720
+    cx, cy = width / 2, height / 2 + 10
+    main_r = 250
+    subgroup_r = 46
 
-    for day_idx in range(days):
-        current_date = start_date + timedelta(days=day_idx)
-        chosen: list[int] = []
+    # main region centers
+    region_positions = {
+        "A": (cx, cy - 225),
+        "B": (cx + 285, cy),
+        "C": (cx, cy + 225),
+        "D": (cx - 285, cy),
+    }
 
-        for group_name in group_for_day(day_idx):
-            result = eligible_candidates(
-                pharmacies,
-                group_name,
-                chosen,
-                state,
-                current_date,
-                min_distance_km,
-                min_gap_days,
-            )
-            valid = result[result["selectable"]].sort_values("decision_score")
-            if valid.empty:
-                continue
-            row = valid.iloc[0]
-            pid = int(row["pharmacy_id"])
-            chosen.append(pid)
-            state.apply_assignment(pid, current_date)
-            rows.append(
-                {
-                    "date": current_date,
-                    "group": group_name,
-                    "pharmacy_id": pid,
-                    "pharmacy_name": row["pharmacy_name"],
-                    "decision_score": row["decision_score"],
-                }
+    subgroup_positions = {}
+    for region, (rx, ry) in region_positions.items():
+        angle_start = {"A": 200, "B": 110, "C": 20, "D": -70}[region]
+        for idx in range(1, 5):
+            angle = math.radians(angle_start + (idx - 1) * 38)
+            subgroup_positions[f"{region}{idx}"] = (
+                rx + math.cos(angle) * 115,
+                ry + math.sin(angle) * 115,
             )
 
-    return pd.DataFrame(rows)
+    all_combo_lines = []
+    for combo in KOMB_ABC:
+        pts = [subgroup_positions[g] for g in combo]
+        path = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts + [pts[0]])
+        all_combo_lines.append(
+            f'<polyline points="{path}" fill="none" stroke="#CBD5E1" stroke-width="1.4" opacity="0.45"/>'
+        )
+
+    active_pts = [subgroup_positions[g] for g in active_combo]
+    active_path = " ".join(f"{x:.1f},{y:.1f}" for x, y in active_pts + [active_pts[0]])
+    active_line = (
+        f'<polyline points="{active_path}" fill="none" stroke="#123B6D" '
+        f'stroke-width="5" opacity="0.95" stroke-linejoin="round"/>'
+    )
+
+    region_shapes = []
+    subgroup_shapes = []
+
+    for region, (rx, ry) in region_positions.items():
+        region_color = REGION_COLORS[region]
+        region_shapes.append(
+            f'<circle cx="{rx}" cy="{ry}" r="150" fill="{region_color}" opacity="0.08" '
+            f'stroke="{region_color}" stroke-width="3"/>'
+        )
+        region_shapes.append(
+            f'<text x="{rx}" y="{ry-122}" text-anchor="middle" '
+            f'font-size="22" font-weight="800" fill="{region_color}">{region} BÖLGESİ</text>'
+        )
+
+    for group, (gx, gy) in subgroup_positions.items():
+        active = group in active_combo
+        region_color = REGION_COLORS[group[0]]
+        fill = region_color if active else "#FFFFFF"
+        text_color = "#FFFFFF" if active else region_color
+        stroke_width = 4 if active else 2
+
+        subgroup_shapes.append(
+            f'<circle cx="{gx}" cy="{gy}" r="{subgroup_r}" fill="{fill}" '
+            f'stroke="{region_color}" stroke-width="{stroke_width}"/>'
+        )
+        subgroup_shapes.append(
+            f'<text x="{gx}" y="{gy+6}" text-anchor="middle" '
+            f'font-size="18" font-weight="800" fill="{text_color}">{group}</text>'
+        )
+
+        count = int((pharmacies["group"] == group).sum())
+        subgroup_shapes.append(
+            f'<text x="{gx}" y="{gy+67}" text-anchor="middle" '
+            f'font-size="12" fill="#475467">{count} eczane</text>'
+        )
+
+        if group in selected_by_group:
+            pid = selected_by_group[group]
+            name = pharmacies.loc[pharmacies["pharmacy_id"] == pid, "pharmacy_name"]
+            if not name.empty:
+                subgroup_shapes.append(
+                    f'<text x="{gx}" y="{gy-58}" text-anchor="middle" '
+                    f'font-size="12" font-weight="700" fill="#123B6D">{escape(name.iloc[0])}</text>'
+                )
+
+    legend = """
+    <g transform="translate(40,650)">
+      <line x1="0" y1="0" x2="52" y2="0" stroke="#123B6D" stroke-width="5"/>
+      <text x="62" y="5" font-size="14" fill="#344054">Aktif eşlenik kombinasyonu</text>
+      <line x1="300" y1="0" x2="352" y2="0" stroke="#CBD5E1" stroke-width="2"/>
+      <text x="362" y="5" font-size="14" fill="#344054">Diğer olası eşlenikler</text>
+    </g>
+    """
+
+    svg = f"""
+    <div style="width:100%; background:white; border:1px solid #E4E7EC; border-radius:18px; padding:8px;">
+      <svg width="100%" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100%" height="100%" rx="18" fill="#FFFFFF"/>
+        <text x="{cx}" y="38" text-anchor="middle" font-size="26" font-weight="800" fill="#123B6D">
+          AYÇA Grup ve Eşlenik Simülasyonu
+        </text>
+        <text x="{cx}" y="64" text-anchor="middle" font-size="14" fill="#667085">
+          Çembersel bölge yapısı ve günlük aktif kombinasyon
+        </text>
+        {''.join(region_shapes)}
+        {''.join(all_combo_lines)}
+        {active_line}
+        {''.join(subgroup_shapes)}
+        {legend}
+      </svg>
+    </div>
+    """
+    return svg
