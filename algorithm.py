@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -165,18 +164,41 @@ def eligible_candidates(
             reason = "Tüm temel kurallara uygun"
             selectable = True
 
-        score = (
-            float(row.historical_load) * 0.70
-            + float(row.weekend_count) * 1.50
-            + float(row.holiday_count) * 2.00
-            + state.duty_counts.get(pid, 0) * 1.25
-            - min(gap, 35) * 0.08
+        # Şeffaf uygunluk puanı: yüksek puan daha uygun aday demektir.
+        # Her bileşen 0-100 aralığında değerlendirilir.
+        gap_score = max(0.0, min(100.0, (gap / max(min_gap_days, 1)) * 70.0))
+        if gap >= 35:
+            gap_score = 100.0
+
+        load_score = max(0.0, 100.0 - float(row.historical_load) * 7.0)
+        weekend_score = max(0.0, 100.0 - float(row.weekend_count) * 22.0)
+        holiday_score = max(0.0, 100.0 - float(row.holiday_count) * 30.0)
+        repeat_score = max(0.0, 100.0 - state.duty_counts.get(pid, 0) * 35.0)
+
+        distance_score = 100.0
+        if nearest < 999:
+            distance_score = max(
+                0.0,
+                min(100.0, (nearest / max(min_distance_km, 0.01)) * 100.0),
+            )
+
+        suitability = (
+            gap_score * 0.25
+            + load_score * 0.20
+            + weekend_score * 0.15
+            + holiday_score * 0.15
+            + repeat_score * 0.10
+            + distance_score * 0.15
         )
+
+        # Sert kurala takılan aday önerilemez; puanı yalnızca açıklama amaçlı kalır.
+        if not selectable:
+            suitability = min(suitability, 49.0)
 
         statuses.append(status)
         reasons.append(reason)
         selectable_flags.append(selectable)
-        scores.append(round(score, 3))
+        scores.append(round(suitability, 1))
 
     candidates["status"] = statuses
     candidates["reason"] = reasons
