@@ -16,9 +16,14 @@ from streamlit_folium import st_folium
 
 from algorithm import (
     KOMB_ABC,
+    DEMO_CENTER_LAT,
+    DEMO_CENTER_LON,
+    REGION_ANGLES,
+    RING_LIMITS_KM,
     SimulationState,
     eligible_candidates,
     generate_pharmacies,
+    pharmacy_layout_is_valid,
     group_for_day,
     status_palette,
     build_group_svg,
@@ -226,11 +231,21 @@ DATA_PATH = Path(__file__).with_name("pharmacies.csv")
 
 @st.cache_data
 def load_pharmacies() -> pd.DataFrame:
+    """
+    CSV yalnızca yeni çembersel yerleşim standardını karşılıyorsa kullanılır.
+    Eski veya hatalı koordinatlı CSV otomatik olarak yeniden oluşturulur.
+    """
     if DATA_PATH.exists():
-        return pd.read_csv(DATA_PATH)
-    df = generate_pharmacies(seed=42)
-    df.to_csv(DATA_PATH, index=False)
-    return df
+        try:
+            existing = pd.read_csv(DATA_PATH)
+            if pharmacy_layout_is_valid(existing):
+                return existing
+        except Exception:
+            pass
+
+    generated = generate_pharmacies(seed=42)
+    generated.to_csv(DATA_PATH, index=False)
+    return generated
 
 pharmacies = load_pharmacies()
 
@@ -557,8 +572,8 @@ def add_circular_group_grid(
     map_df: pd.DataFrame,
     active_groups: list[str],
 ) -> None:
-    center_lat = float(map_df["lat"].mean())
-    center_lon = float(map_df["lon"].mean())
+    center_lat = DEMO_CENTER_LAT
+    center_lon = DEMO_CENTER_LON
 
     region_colors = {
         "A": "#2563EB",
@@ -567,19 +582,8 @@ def add_circular_group_grid(
         "D": "#7C3AED",
     }
 
-    region_angles = {
-        "A": (100, 170),
-        "B": (190, 260),
-        "C": (280, 350),
-        "D": (10, 80),
-    }
-
-    ring_limits = {
-        1: (0.45, 1.50),
-        2: (1.50, 2.50),
-        3: (2.50, 3.50),
-        4: (3.50, 4.55),
-    }
+    region_angles = REGION_ANGLES
+    ring_limits = RING_LIMITS_KM
 
     active_set = set(active_groups)
 
@@ -700,7 +704,7 @@ def build_folium_map(
     min_distance_km: float,
     active_groups: list[str],
 ) -> folium.Map:
-    center = [float(map_df["lat"].mean()), float(map_df["lon"].mean())]
+    center = [DEMO_CENTER_LAT, DEMO_CENTER_LON]
     fmap = folium.Map(
         location=center,
         zoom_start=13,
@@ -714,6 +718,22 @@ def build_folium_map(
         map_df=map_df,
         active_groups=active_groups,
     )
+
+    # Harita görünümünü bütün çembersel yerleşimi kapsayacak şekilde sabitle.
+    outer_radius_km = max(value[1] for value in RING_LIMITS_KM.values())
+    south_west = destination_point(
+        DEMO_CENTER_LAT,
+        DEMO_CENTER_LON,
+        outer_radius_km * 1.12,
+        225,
+    )
+    north_east = destination_point(
+        DEMO_CENTER_LAT,
+        DEMO_CENTER_LON,
+        outer_radius_km * 1.12,
+        45,
+    )
+    fmap.fit_bounds([south_west, north_east])
 
     # Seçilen eczanelerin minimum mesafe çemberleri.
     for row in selected_df.itertuples():
