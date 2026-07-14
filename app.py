@@ -988,6 +988,9 @@ if "canonical_current_date" not in st.session_state:
 if "plan_calendar_date" not in st.session_state:
     st.session_state.plan_calendar_date = st.session_state.canonical_current_date
 
+if "plan_calendar_picker" not in st.session_state:
+    st.session_state.plan_calendar_picker = st.session_state.plan_calendar_date
+
 state: SimulationState = st.session_state.state
 
 
@@ -1001,6 +1004,7 @@ def sync_manual_date_from_widget() -> None:
     st.session_state.manual_selected_date = selected_date
     st.session_state.canonical_current_date = selected_date
     st.session_state.plan_calendar_date = selected_date
+    st.session_state.plan_calendar_picker = selected_date
     clear_current_selections()
 
 
@@ -1010,6 +1014,7 @@ def set_manual_date(target_date: date) -> None:
     st.session_state.manual_date_widget = safe_date
     st.session_state.canonical_current_date = safe_date
     st.session_state.plan_calendar_date = safe_date
+    st.session_state.plan_calendar_picker = safe_date
     clear_current_selections()
 
 
@@ -1027,6 +1032,29 @@ def go_next_manual_day() -> None:
 
 def go_today_manual() -> None:
     set_manual_date(max(ROTATION_START_DATE, date.today()))
+
+
+def sync_plan_calendar_date() -> None:
+    """Takvim, özet, harita ve plan ekranını aynı tarihe geçirir."""
+    selected_date = st.session_state.plan_calendar_picker
+
+    st.session_state.plan_calendar_date = selected_date
+    st.session_state.canonical_current_date = selected_date
+    st.session_state.manual_selected_date = selected_date
+    st.session_state.manual_date_widget = selected_date
+
+    # Tarih oluşturulmuş otomatik planın içindeyse otomatik gün
+    # gezgini de aynı tarihe taşınır. Plan dışında ise tarih korunur
+    # ve o gün için seçim bulunmadığı gösterilir.
+    if st.session_state.get("auto_plan_ready", False):
+        generated_start = st.session_state.auto_generated_start_date
+        generated_days = int(st.session_state.auto_generated_days_count)
+        generated_dates = [
+            generated_start + timedelta(days=offset)
+            for offset in range(generated_days)
+        ]
+        if selected_date in generated_dates:
+            st.session_state.auto_view_date = selected_date
 
 
 with st.sidebar:
@@ -1206,6 +1234,7 @@ with st.sidebar:
             st.session_state.auto_view_date = auto_start_date
             st.session_state.canonical_current_date = auto_start_date
             st.session_state.plan_calendar_date = auto_start_date
+            st.session_state.plan_calendar_picker = auto_start_date
             st.session_state.auto_plan_ready = True
             clear_current_selections()
             st.rerun()
@@ -1255,6 +1284,7 @@ if planning_mode == "Otomatik Çok Günlük Plan":
                 st.session_state.auto_view_date = new_date
                 st.session_state.canonical_current_date = new_date
                 st.session_state.plan_calendar_date = new_date
+                st.session_state.plan_calendar_picker = new_date
                 st.rerun()
 
         with auto_date_col:
@@ -1270,6 +1300,7 @@ if planning_mode == "Otomatik Çok Günlük Plan":
                 st.session_state.auto_view_date = selected_auto_date
                 st.session_state.canonical_current_date = selected_auto_date
                 st.session_state.plan_calendar_date = selected_auto_date
+                st.session_state.plan_calendar_picker = selected_auto_date
                 st.rerun()
 
         with auto_next_col:
@@ -1283,9 +1314,12 @@ if planning_mode == "Otomatik Çok Günlük Plan":
                 st.session_state.auto_view_date = new_date
                 st.session_state.canonical_current_date = new_date
                 st.session_state.plan_calendar_date = new_date
+                st.session_state.plan_calendar_picker = new_date
                 st.rerun()
 
-        st.session_state.canonical_current_date = st.session_state.auto_view_date
+        # canonical_current_date; takvim, özet, harita ve planın
+        # ortak tarihidir. Otomatik gün seçicisi yalnızca kullanıcı
+        # onu değiştirdiğinde bu tarihi günceller.
         current_date = st.session_state.canonical_current_date
         day_no = (current_date - ROTATION_START_DATE).days + 1
         active_groups = group_for_day(
@@ -1786,47 +1820,26 @@ with tab_plan:
     calendar_col, selected_date_col = st.columns([1, 2], gap="large")
 
     with calendar_col:
-        selected_plan_date = st.date_input(
+        st.date_input(
             "Tarih seçin",
-            value=st.session_state.plan_calendar_date,
             min_value=ROTATION_START_DATE,
             max_value=ROTATION_START_DATE + timedelta(days=365),
             format="DD.MM.YYYY",
             key="plan_calendar_picker",
+            on_change=sync_plan_calendar_date,
         )
-
-        if selected_plan_date != st.session_state.plan_calendar_date:
-            st.session_state.plan_calendar_date = selected_plan_date
-            st.session_state.canonical_current_date = selected_plan_date
-            st.session_state.manual_selected_date = selected_plan_date
-            st.session_state.manual_date_widget = selected_plan_date
-
-            if (
-                planning_mode == "Otomatik Çok Günlük Plan"
-                and st.session_state.auto_plan_ready
-            ):
-                generated_start = st.session_state.auto_generated_start_date
-                generated_days = int(
-                    st.session_state.auto_generated_days_count
-                )
-                generated_dates = [
-                    generated_start + timedelta(days=offset)
-                    for offset in range(generated_days)
-                ]
-                if selected_plan_date in generated_dates:
-                    st.session_state.auto_view_date = selected_plan_date
-
-            st.rerun()
 
     with selected_date_col:
         st.markdown("#### Seçilen Tarih")
         st.markdown(
-            f"### {st.session_state.plan_calendar_date.day} "
-            f"{month_names[st.session_state.plan_calendar_date.month]} "
-            f"{st.session_state.plan_calendar_date.year}"
+            f"### {st.session_state.canonical_current_date.day} "
+            f"{month_names[st.session_state.canonical_current_date.month]} "
+            f"{st.session_state.canonical_current_date.year}"
         )
 
-    plan_display_date = st.session_state.plan_calendar_date
+    # Bütün ekranlarda kullanılan tek tarih.
+    plan_display_date = st.session_state.canonical_current_date
+    st.session_state.plan_calendar_date = plan_display_date
     plan_day_no = (plan_display_date - ROTATION_START_DATE).days + 1
     plan_active_groups = group_for_day(
         (plan_day_no - 1) % len(KOMB_ABC)
