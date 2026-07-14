@@ -500,172 +500,198 @@ def build_plan_cards(
     ).strip()
 
 
-def convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    """Return the convex hull of latitude/longitude points using monotonic chain."""
-    unique_points = sorted(set(points))
+def destination_point(
+    center_lat: float,
+    center_lon: float,
+    distance_km: float,
+    angle_deg: float,
+) -> tuple[float, float]:
+    angle = math.radians(angle_deg)
+    north_km = distance_km * math.sin(angle)
+    east_km = distance_km * math.cos(angle)
 
-    if len(unique_points) <= 1:
-        return unique_points
+    lat = center_lat + north_km / 111.32
+    lon = center_lon + east_km / (
+        111.32 * math.cos(math.radians(center_lat))
+    )
+    return lat, lon
 
-    def cross(
-        origin: tuple[float, float],
-        point_a: tuple[float, float],
-        point_b: tuple[float, float],
-    ) -> float:
-        return (
-            (point_a[0] - origin[0]) * (point_b[1] - origin[1])
-            - (point_a[1] - origin[1]) * (point_b[0] - origin[0])
+
+def sector_polygon(
+    center_lat: float,
+    center_lon: float,
+    inner_km: float,
+    outer_km: float,
+    start_angle: float,
+    end_angle: float,
+    steps: int = 28,
+) -> list[tuple[float, float]]:
+    outer_points = [
+        destination_point(
+            center_lat,
+            center_lon,
+            outer_km,
+            start_angle + (end_angle - start_angle) * index / steps,
         )
+        for index in range(steps + 1)
+    ]
 
-    lower = []
-    for point in unique_points:
-        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
-            lower.pop()
-        lower.append(point)
+    if inner_km <= 0:
+        return [(center_lat, center_lon)] + outer_points
 
-    upper = []
-    for point in reversed(unique_points):
-        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
-            upper.pop()
-        upper.append(point)
+    inner_points = [
+        destination_point(
+            center_lat,
+            center_lon,
+            inner_km,
+            end_angle - (end_angle - start_angle) * index / steps,
+        )
+        for index in range(steps + 1)
+    ]
 
-    return lower[:-1] + upper[:-1]
+    return outer_points + inner_points
 
 
-def add_group_boundaries(
+def add_circular_group_grid(
     fmap: folium.Map,
     map_df: pd.DataFrame,
     active_groups: list[str],
 ) -> None:
-    boundary_colors = {
+    center_lat = float(map_df["lat"].mean())
+    center_lon = float(map_df["lon"].mean())
+
+    region_colors = {
         "A": "#2563EB",
         "B": "#16A34A",
         "C": "#EC4899",
         "D": "#7C3AED",
     }
 
-    all_groups = sorted(
-        map_df["group"].dropna().astype(str).unique().tolist()
-    )
-    active_group_set = set(active_groups)
+    region_angles = {
+        "A": (100, 170),
+        "B": (190, 260),
+        "C": (280, 350),
+        "D": (10, 80),
+    }
 
-    # Önce pasif grupları çiziyoruz; aktif gruplar üstte ve daha belirgin kalır.
-    ordered_groups = [
-        group_name
-        for group_name in all_groups
-        if group_name not in active_group_set
-    ] + [
-        group_name
-        for group_name in all_groups
-        if group_name in active_group_set
-    ]
+    ring_limits = {
+        1: (0.45, 1.50),
+        2: (1.50, 2.50),
+        3: (2.50, 3.50),
+        4: (3.50, 4.55),
+    }
 
-    for group_name in ordered_groups:
-        group_df = map_df.loc[map_df["group"] == group_name].copy()
+    active_set = set(active_groups)
 
-        if group_df.empty:
-            continue
+    # Önce bütün 16 alt grubu silik olarak çiz.
+    for region in ("A", "B", "C", "D"):
+        start_angle, end_angle = region_angles[region]
+        color = region_colors[region]
 
-        is_active = group_name in active_group_set
-        color = boundary_colors.get(group_name[0], "#475467")
-
-        coordinates = [
-            (float(row.lat), float(row.lon))
-            for row in group_df.itertuples()
-        ]
-
-        center_lat = float(group_df["lat"].mean())
-        center_lon = float(group_df["lon"].mean())
-
-        line_weight = 3 if is_active else 1.25
-        line_opacity = 0.95 if is_active else 0.22
-        fill_opacity = 0.07 if is_active else 0.012
-        dash_pattern = "8, 8" if is_active else "4, 9"
-        tooltip_text = (
-            f"{group_name} grubu · Bugün aktif"
-            if is_active
-            else f"{group_name} grubu · Bugün pasif"
-        )
-
-        if len(coordinates) >= 3:
-            hull_input = [(lon, lat) for lat, lon in coordinates]
-            hull = convex_hull(hull_input)
-            hull_lat_lon = [(lat, lon) for lon, lat in hull]
+        for ring_no in range(1, 5):
+            inner_km, outer_km = ring_limits[ring_no]
+            group_name = f"{region}{ring_no}"
+            is_active = group_name in active_set
 
             folium.Polygon(
-                locations=hull_lat_lon,
+                locations=sector_polygon(
+                    center_lat,
+                    center_lon,
+                    inner_km,
+                    outer_km,
+                    start_angle,
+                    end_angle,
+                ),
                 color=color,
-                weight=line_weight,
-                opacity=line_opacity,
-                dash_array=dash_pattern,
+                weight=3 if is_active else 1.2,
+                opacity=0.95 if is_active else 0.22,
+                dash_array="8, 7" if is_active else "4, 9",
                 fill=True,
                 fill_color=color,
-                fill_opacity=fill_opacity,
-                tooltip=tooltip_text,
+                fill_opacity=0.14 if is_active else 0.018,
+                tooltip=(
+                    f"{group_name} · Bugün aktif"
+                    if is_active
+                    else f"{group_name} · Pasif"
+                ),
             ).add_to(fmap)
 
-        elif len(coordinates) == 2:
-            folium.PolyLine(
-                locations=coordinates,
-                color=color,
-                weight=line_weight,
-                opacity=line_opacity,
-                dash_array=dash_pattern,
-                tooltip=tooltip_text,
+            label_distance = (inner_km + outer_km) / 2
+            label_angle = (start_angle + end_angle) / 2
+            label_lat, label_lon = destination_point(
+                center_lat,
+                center_lon,
+                label_distance,
+                label_angle,
+            )
+
+            if is_active:
+                label_html = f"""
+                <div style="
+                    transform:translate(-50%,-50%);
+                    background:{color};
+                    color:white;
+                    border:2px solid white;
+                    border-radius:999px;
+                    padding:4px 8px;
+                    font-size:11px;
+                    font-weight:900;
+                    box-shadow:0 3px 9px rgba(16,24,40,.25);">
+                    {group_name}
+                </div>
+                """
+            else:
+                label_html = f"""
+                <div style="
+                    transform:translate(-50%,-50%);
+                    color:{color};
+                    background:rgba(255,255,255,.65);
+                    border-radius:999px;
+                    padding:1px 4px;
+                    font-size:8px;
+                    font-weight:700;
+                    opacity:.35;">
+                    {group_name}
+                </div>
+                """
+
+            folium.Marker(
+                [label_lat, label_lon],
+                icon=folium.DivIcon(html=label_html),
+                interactive=False,
             ).add_to(fmap)
 
-        else:
-            folium.Circle(
-                location=coordinates[0],
-                radius=250,
-                color=color,
-                weight=line_weight,
-                opacity=line_opacity,
-                dash_array=dash_pattern,
-                fill=True,
-                fill_color=color,
-                fill_opacity=fill_opacity,
-                tooltip=tooltip_text,
-            ).add_to(fmap)
+    # Ortak merkez.
+    folium.CircleMarker(
+        [center_lat, center_lon],
+        radius=6,
+        color="#123B6D",
+        weight=2,
+        fill=True,
+        fill_color="#FFFFFF",
+        fill_opacity=1,
+        tooltip="AYÇA grup merkezi",
+    ).add_to(fmap)
 
-        if is_active:
-            label_html = f"""
+    folium.Marker(
+        [center_lat, center_lon],
+        icon=folium.DivIcon(
+            html="""
             <div style="
-                transform: translate(-50%, -50%);
-                background: {color};
-                color: white;
-                border: 2px solid white;
-                border-radius: 999px;
-                padding: 5px 9px;
-                font-size: 12px;
-                font-weight: 900;
-                box-shadow: 0 3px 10px rgba(16,24,40,.25);
-                white-space: nowrap;">
-                {group_name}
+                transform:translate(-50%,-34px);
+                white-space:nowrap;
+                background:#123B6D;
+                color:white;
+                border-radius:8px;
+                padding:4px 7px;
+                font-size:10px;
+                font-weight:800;">
+                MERKEZ
             </div>
             """
-        else:
-            label_html = f"""
-            <div style="
-                transform: translate(-50%, -50%);
-                color: {color};
-                background: rgba(255,255,255,.72);
-                border: 1px dashed {color};
-                border-radius: 999px;
-                padding: 2px 6px;
-                font-size: 9px;
-                font-weight: 700;
-                opacity: .34;
-                white-space: nowrap;">
-                {group_name}
-            </div>
-            """
-
-        folium.Marker(
-            location=[center_lat, center_lon],
-            icon=folium.DivIcon(html=label_html),
-            interactive=False,
-        ).add_to(fmap)
+        ),
+        interactive=False,
+    ).add_to(fmap)
 
 
 def build_folium_map(
@@ -677,13 +703,13 @@ def build_folium_map(
     center = [float(map_df["lat"].mean()), float(map_df["lon"].mean())]
     fmap = folium.Map(
         location=center,
-        zoom_start=12,
+        zoom_start=13,
         tiles="CartoDB positron",
         control_scale=True,
     )
 
-    # Aktif grupların kesik çizgili sınırlarını haritaya ekle.
-    add_group_boundaries(
+    # Çembersel 4 bölge × 4 halka grup yapısını haritaya ekle.
+    add_circular_group_grid(
         fmap=fmap,
         map_df=map_df,
         active_groups=active_groups,
@@ -970,8 +996,7 @@ with tab_map:
           <span><i class="dot" style="background:#DC2626"></i> Yakınlık engeli</span>
           <span><i class="dot" style="background:#F59E0B"></i> Nöbet aralığı engeli</span>
           <span><i class="dot" style="background:#7C3AED"></i> Grup dışı / pasif</span>
-          <span style="border-bottom:3px dashed #2563EB;padding-bottom:2px;">Aktif grup sınırı</span>
-          <span style="border-bottom:1px dashed rgba(71,84,103,.35);padding-bottom:2px;color:#98A2B3;">Pasif grup sınırı</span>
+          <span style="border-bottom:3px dashed #2563EB;padding-bottom:2px;">Grup sınırı</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1039,7 +1064,7 @@ with tab_map:
             unsafe_allow_html=True,
         )
         st.subheader("Bugün Seçilebilecek Eczaneler")
-        st.caption("Bir eczane işaretine tıklayın. Sistem uygunluk puanını ve tüm karar kontrollerini canlı gösterir.")
+        st.caption("Harita dört ana bölge ve merkezden dışa doğru dört halka halinde düzenlenmiştir. Bir eczane işaretine tıklayarak seçim yapın.")
 
         selected_df = base_map_df[base_map_df["status"] == "selected"].copy()
         fmap = build_folium_map(
