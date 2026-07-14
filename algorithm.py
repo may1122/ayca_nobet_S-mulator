@@ -1,117 +1,168 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, timedelta
-from math import asin, cos, radians, sin, sqrt
+from datetime import date
+import copy
 import math
-from html import escape
+import random
 
-import numpy as np
 import pandas as pd
 
+
+# 8 günlük dengeli eşlenik rotasyon.
 KOMB_ABC = [
     ("A1", "B2", "C3", "D4"),
     ("A2", "B3", "C4", "D1"),
     ("A3", "B4", "C1", "D2"),
     ("A4", "B1", "C2", "D3"),
-    ("A1", "C2", "D3", "B4"),
-    ("A2", "C3", "D4", "B1"),
-    ("A3", "C4", "D1", "B2"),
-    ("A4", "C1", "D2", "B3"),
+    ("A1", "B4", "C2", "D3"),
+    ("A2", "B1", "C3", "D4"),
+    ("A3", "B2", "C4", "D1"),
+    ("A4", "B3", "C1", "D2"),
 ]
 
-GROUPS = [f"{main}{sub}" for main in "ABCD" for sub in range(1, 5)]
-
-GROUP_CENTERS = {
-    "A1": (38.690, 29.370), "A2": (38.700, 29.390),
-    "A3": (38.710, 29.410), "A4": (38.695, 29.430),
-    "B1": (38.675, 29.375), "B2": (38.680, 29.400),
-    "B3": (38.685, 29.425), "B4": (38.670, 29.445),
-    "C1": (38.655, 29.380), "C2": (38.660, 29.405),
-    "C3": (38.650, 29.430), "C4": (38.655, 29.455),
-    "D1": (38.635, 29.385), "D2": (38.635, 29.410),
-    "D3": (38.635, 29.435), "D4": (38.635, 29.460),
-}
-
-REGION_COLORS = {
-    "A": "#2563EB",
-    "B": "#16A34A",
-    "C": "#F59E0B",
-    "D": "#7C3AED",
-}
-
-def generate_pharmacies(seed: int = 42, total: int = 112) -> pd.DataFrame:
-    rng = np.random.default_rng(seed)
-    rows = []
-    pid = 1
-    per_group = total // len(GROUPS)
-
-    for group in GROUPS:
-        center_lat, center_lon = GROUP_CENTERS[group]
-
-        for _ in range(per_group):
-            rows.append(
-                {
-                    "pharmacy_id": pid,
-                    "pharmacy_name": f"Eczane {pid}",
-                    "group": group,
-                    "region": group[0],
-                    "lat": center_lat + rng.normal(0, 0.006),
-                    "lon": center_lon + rng.normal(0, 0.008),
-                    "historical_load": round(float(rng.uniform(3.0, 11.0)), 2),
-                    "weekend_count": int(rng.integers(0, 4)),
-                    "holiday_count": int(rng.integers(0, 3)),
-                    "last_duty_days_ago": int(rng.integers(5, 45)),
-                }
-            )
-            pid += 1
-
-    return pd.DataFrame(rows)
-
-def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    r = 6371.0088
-    dlat = radians(lat2 - lat1)
-    dlon = radians(lon2 - lon1)
-    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
-    return 2 * r * asin(sqrt(a))
-
-@dataclass
-class SimulationState:
-    last_duty_dates: dict[int, date] = field(default_factory=dict)
-    duty_counts: dict[int, int] = field(default_factory=dict)
-
-    @classmethod
-    def from_dataframe(cls, df: pd.DataFrame, reference_date: date | None = None) -> "SimulationState":
-        reference_date = reference_date or date(2026, 8, 1)
-        return cls(
-            last_duty_dates={
-                int(r.pharmacy_id): reference_date - timedelta(days=int(r.last_duty_days_ago))
-                for r in df.itertuples()
-            },
-            duty_counts={int(r.pharmacy_id): 0 for r in df.itertuples()},
-        )
-
-    def copy(self) -> "SimulationState":
-        return SimulationState(
-            last_duty_dates=dict(self.last_duty_dates),
-            duty_counts=dict(self.duty_counts),
-        )
-
-    def apply_assignment(self, pharmacy_id: int, duty_date: date) -> None:
-        self.last_duty_dates[int(pharmacy_id)] = duty_date
-        self.duty_counts[int(pharmacy_id)] = self.duty_counts.get(int(pharmacy_id), 0) + 1
 
 def group_for_day(day_index: int) -> tuple[str, str, str, str]:
     return KOMB_ABC[day_index % len(KOMB_ABC)]
 
-def status_palette() -> dict[str, list[int]]:
-    return {
-        "selected": [29, 78, 216, 235],
-        "selectable": [22, 163, 74, 215],
-        "distance_blocked": [220, 38, 38, 215],
-        "gap_blocked": [245, 158, 11, 220],
-        "inactive": [124, 58, 237, 80],
+
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius_km = 6371.0088
+    p1 = math.radians(lat1)
+    p2 = math.radians(lat2)
+    delta_p = math.radians(lat2 - lat1)
+    delta_l = math.radians(lon2 - lon1)
+
+    value = (
+        math.sin(delta_p / 2) ** 2
+        + math.cos(p1) * math.cos(p2) * math.sin(delta_l / 2) ** 2
+    )
+    return radius_km * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+
+
+@dataclass
+class SimulationState:
+    last_duty_by_id: dict[int, date | None] = field(default_factory=dict)
+    assignment_count_by_id: dict[int, int] = field(default_factory=dict)
+
+    @classmethod
+    def from_dataframe(cls, pharmacies: pd.DataFrame) -> "SimulationState":
+        last_duty = {}
+        assignment_count = {}
+
+        for row in pharmacies.itertuples():
+            raw_date = getattr(row, "last_duty_date", None)
+            parsed_date = None
+            if raw_date is not None and not pd.isna(raw_date) and str(raw_date).strip():
+                parsed = pd.to_datetime(raw_date, errors="coerce")
+                if not pd.isna(parsed):
+                    parsed_date = parsed.date()
+
+            pharmacy_id = int(row.pharmacy_id)
+            last_duty[pharmacy_id] = parsed_date
+            assignment_count[pharmacy_id] = int(
+                getattr(row, "assignment_count", 0) or 0
+            )
+
+        return cls(
+            last_duty_by_id=last_duty,
+            assignment_count_by_id=assignment_count,
+        )
+
+    def copy(self) -> "SimulationState":
+        return copy.deepcopy(self)
+
+    def apply_assignment(self, pharmacy_id: int, duty_date: date) -> None:
+        pharmacy_id = int(pharmacy_id)
+        self.last_duty_by_id[pharmacy_id] = duty_date
+        self.assignment_count_by_id[pharmacy_id] = (
+            self.assignment_count_by_id.get(pharmacy_id, 0) + 1
+        )
+
+
+def generate_pharmacies(
+    seed: int = 42,
+    center_lat: float = 39.9040,
+    center_lon: float = 41.2670,
+    pharmacies_per_subgroup: int = 6,
+) -> pd.DataFrame:
+    """
+    96 eczanelik dengeli demo:
+    4 ana bölge × 4 halka × 6 eczane.
+    A: kuzeybatı, B: güneybatı, C: güneydoğu, D: kuzeydoğu.
+    """
+    rng = random.Random(seed)
+
+    region_angles = {
+        "A": (100, 170),
+        "B": (190, 260),
+        "C": (280, 350),
+        "D": (10, 80),
     }
+
+    # Her halka bir sonraki uzaklık kuşağını temsil eder.
+    ring_centers_km = {1: 1.10, 2: 2.05, 3: 3.00, 4: 3.95}
+    ring_jitter_km = 0.26
+
+    rows = []
+    pharmacy_id = 1
+    reference_date = pd.Timestamp("2026-08-01")
+
+    for region in ("A", "B", "C", "D"):
+        angle_start, angle_end = region_angles[region]
+
+        for ring_no in range(1, 5):
+            subgroup = f"{region}{ring_no}"
+
+            for local_index in range(pharmacies_per_subgroup):
+                fraction = (local_index + 1) / (pharmacies_per_subgroup + 1)
+                angle_deg = (
+                    angle_start
+                    + (angle_end - angle_start) * fraction
+                    + rng.uniform(-3.4, 3.4)
+                )
+                distance_km = (
+                    ring_centers_km[ring_no]
+                    + rng.uniform(-ring_jitter_km, ring_jitter_km)
+                )
+
+                angle_rad = math.radians(angle_deg)
+                north_km = distance_km * math.sin(angle_rad)
+                east_km = distance_km * math.cos(angle_rad)
+
+                lat = center_lat + north_km / 111.32
+                lon = center_lon + east_km / (
+                    111.32 * math.cos(math.radians(center_lat))
+                )
+
+                days_since_last = rng.randint(16, 45)
+                historical_load = round(rng.uniform(2.8, 6.8), 1)
+                weekend_count = rng.randint(0, 3)
+                holiday_count = rng.randint(0, 1)
+
+                rows.append(
+                    {
+                        "pharmacy_id": pharmacy_id,
+                        "pharmacy_name": f"Eczane {pharmacy_id:03d}",
+                        "region": region,
+                        "ring": ring_no,
+                        "group": subgroup,
+                        "lat": round(lat, 6),
+                        "lon": round(lon, 6),
+                        "distance_from_center_km": round(distance_km, 2),
+                        "historical_load": historical_load,
+                        "weekend_count": weekend_count,
+                        "holiday_count": holiday_count,
+                        "assignment_count": rng.randint(2, 5),
+                        "last_duty_date": (
+                            reference_date - pd.Timedelta(days=days_since_last)
+                        ).date().isoformat(),
+                    }
+                )
+                pharmacy_id += 1
+
+    return pd.DataFrame(rows)
+
 
 def eligible_candidates(
     pharmacies: pd.DataFrame,
@@ -122,151 +173,135 @@ def eligible_candidates(
     min_distance_km: float,
     min_gap_days: int,
 ) -> pd.DataFrame:
-    candidates = pharmacies[pharmacies["group"] == group_name].copy()
-    selected_rows = pharmacies[pharmacies["pharmacy_id"].isin(selected_ids)]
+    selected_ids = [int(value) for value in selected_ids]
+    selected_rows = pharmacies[
+        pharmacies["pharmacy_id"].astype(int).isin(selected_ids)
+    ]
 
+    result = pharmacies[pharmacies["group"] == group_name].copy()
+
+    distances = []
+    gaps = []
     statuses = []
     reasons = []
-    distances = []
-    days_since_last = []
+    selectable_values = []
     scores = []
-    selectable_flags = []
 
-    for row in candidates.itertuples():
-        pid = int(row.pharmacy_id)
-        last_date = state.last_duty_dates.get(pid)
-        gap = (current_date - last_date).days if last_date else 999
-        days_since_last.append(gap)
+    for row in result.itertuples():
+        pharmacy_id = int(row.pharmacy_id)
 
-        nearest = 999.0
-        for selected in selected_rows.itertuples():
-            if int(selected.pharmacy_id) == pid:
-                continue
-            dist = haversine_km(row.lat, row.lon, selected.lat, selected.lon)
-            nearest = min(nearest, dist)
+        nearest_distance = None
+        if not selected_rows.empty:
+            nearest_distance = min(
+                haversine_km(
+                    float(row.lat),
+                    float(row.lon),
+                    float(selected.lat),
+                    float(selected.lon),
+                )
+                for selected in selected_rows.itertuples()
+            )
 
-        distances.append(round(nearest, 2) if nearest < 999 else None)
+        last_duty = state.last_duty_by_id.get(pharmacy_id)
+        days_since_last = (
+            (current_date - last_duty).days
+            if last_duty is not None
+            else 999
+        )
 
-        if pid in selected_ids:
+        gap_ok = days_since_last >= min_gap_days
+        distance_ok = (
+            nearest_distance is None
+            or nearest_distance >= min_distance_km
+        )
+
+        is_selected = pharmacy_id in selected_ids
+        selectable = gap_ok and distance_ok and not is_selected
+
+        if is_selected:
             status = "selected"
-            reason = "Zaten seçildi"
-            selectable = True
-        elif nearest < min_distance_km:
-            status = "distance_blocked"
-            reason = f"Seçilen eczaneye {nearest:.2f} km uzaklıkta"
-            selectable = False
-        elif gap < min_gap_days:
+            reason = "Bugünkü plan için seçildi"
+        elif not gap_ok:
             status = "gap_blocked"
-            reason = f"Son nöbetten yalnızca {gap} gün geçti"
-            selectable = False
+            reason = f"Son nöbetinden yalnızca {days_since_last} gün geçti"
+        elif not distance_ok:
+            status = "distance_blocked"
+            reason = (
+                f"Seçili eczaneye {nearest_distance:.2f} km uzaklıkta; "
+                f"minimum {min_distance_km:.2f} km gerekli"
+            )
         else:
             status = "selectable"
             reason = "Tüm temel kurallara uygun"
-            selectable = True
 
-        # Şeffaf uygunluk puanı: yüksek puan daha uygun aday demektir.
-        # Her bileşen 0-100 aralığında değerlendirilir.
-        gap_score = max(0.0, min(100.0, (gap / max(min_gap_days, 1)) * 70.0))
-        if gap >= 35:
-            gap_score = 100.0
+        historical_load = float(getattr(row, "historical_load", 0) or 0)
+        weekend_count = int(getattr(row, "weekend_count", 0) or 0)
+        holiday_count = int(getattr(row, "holiday_count", 0) or 0)
+        assignment_count = state.assignment_count_by_id.get(pharmacy_id, 0)
 
-        load_score = max(0.0, 100.0 - float(row.historical_load) * 7.0)
-        weekend_score = max(0.0, 100.0 - float(row.weekend_count) * 22.0)
-        holiday_score = max(0.0, 100.0 - float(row.holiday_count) * 30.0)
-        repeat_score = max(0.0, 100.0 - state.duty_counts.get(pid, 0) * 35.0)
+        score = 100.0
+        score -= historical_load * 2.4
+        score -= weekend_count * 3.2
+        score -= holiday_count * 4.5
+        score -= assignment_count * 1.3
+        score += min(days_since_last, 45) * 0.35
 
-        distance_score = 100.0
-        if nearest < 999:
-            distance_score = max(
-                0.0,
-                min(100.0, (nearest / max(min_distance_km, 0.01)) * 100.0),
-            )
+        if nearest_distance is not None:
+            score += min(nearest_distance, 4.0) * 1.4
 
-        suitability = (
-            gap_score * 0.25
-            + load_score * 0.20
-            + weekend_score * 0.15
-            + holiday_score * 0.15
-            + repeat_score * 0.10
-            + distance_score * 0.15
-        )
+        if not gap_ok:
+            score -= 35
+        if not distance_ok:
+            score -= 40
+        if is_selected:
+            score = max(score, 85)
 
-        # Sert kurala takılan aday önerilemez; puanı yalnızca açıklama amaçlı kalır.
-        if not selectable:
-            suitability = min(suitability, 49.0)
+        score = max(0.0, min(100.0, score))
 
+        distances.append(nearest_distance)
+        gaps.append(days_since_last)
         statuses.append(status)
         reasons.append(reason)
-        selectable_flags.append(selectable)
-        scores.append(round(suitability, 1))
+        selectable_values.append(selectable)
+        scores.append(round(score, 2))
 
-    candidates["status"] = statuses
-    candidates["reason"] = reasons
-    candidates["distance_to_nearest_selected_km"] = distances
-    candidates["days_since_last_duty"] = days_since_last
-    candidates["decision_score"] = scores
-    candidates["selectable"] = selectable_flags
+    result["distance_to_nearest_selected_km"] = distances
+    result["days_since_last_duty"] = gaps
+    result["status"] = statuses
+    result["reason"] = reasons
+    result["selectable"] = selectable_values
+    result["decision_score"] = scores
 
-    return candidates
+    return result
+
+
+def status_palette() -> dict[str, list[int]]:
+    return {
+        "selected": [37, 99, 235, 220],
+        "selectable": [22, 163, 74, 210],
+        "distance_blocked": [220, 38, 38, 190],
+        "gap_blocked": [245, 158, 11, 190],
+        "inactive": [148, 163, 184, 110],
+    }
+
 
 def build_group_svg(
     pharmacies: pd.DataFrame,
     active_combo: tuple[str, str, str, str],
-    selected_by_group: dict[str, int],
+    selected_by_group: dict,
 ) -> str:
-    """
-    Grupları iç içe halkalar halinde gösterir.
-
-    Mantık:
-    - Her ana bölge bir çeyrek daireyi temsil eder:
-      A = sol üst, B = sol alt, C = sağ alt, D = sağ üst
-    - Alt grup numarası halkanın seviyesidir:
-      1 = merkezdeki halka, 4 = en dış halka
-    - Aktif kombinasyondaki sektörler bölge renginde vurgulanır.
-    - Haritadan eczane seçildikçe ilgili sektör yeşil çerçeve alır.
-    """
-    width, height = 1180, 820
-    cx, cy = 590, 420
-
+    width = 980
+    height = 720
+    cx = 390
+    cy = 350
+    radii = [72, 132, 196, 260]
     region_colors = {
-        "A": "#0EA5E9",
-        "B": "#22C55E",
-        "C": "#F9A8D4",
-        "D": "#A855F7",
+        "A": "#38A3E1",
+        "B": "#16C96F",
+        "C": "#F39ACD",
+        "D": "#B444ED",
     }
 
-    # SVG yay dilimi oluşturucu.
-    def polar(center_x: float, center_y: float, radius: float, angle_deg: float):
-        angle = math.radians(angle_deg)
-        return (
-            center_x + radius * math.cos(angle),
-            center_y + radius * math.sin(angle),
-        )
-
-    def annular_sector_path(
-        center_x: float,
-        center_y: float,
-        inner_r: float,
-        outer_r: float,
-        start_angle: float,
-        end_angle: float,
-    ) -> str:
-        x1, y1 = polar(center_x, center_y, outer_r, start_angle)
-        x2, y2 = polar(center_x, center_y, outer_r, end_angle)
-        x3, y3 = polar(center_x, center_y, inner_r, end_angle)
-        x4, y4 = polar(center_x, center_y, inner_r, start_angle)
-
-        large_arc = 1 if (end_angle - start_angle) > 180 else 0
-
-        return (
-            f"M {x1:.2f},{y1:.2f} "
-            f"A {outer_r},{outer_r} 0 {large_arc} 1 {x2:.2f},{y2:.2f} "
-            f"L {x3:.2f},{y3:.2f} "
-            f"A {inner_r},{inner_r} 0 {large_arc} 0 {x4:.2f},{y4:.2f} Z"
-        )
-
-    # Saat yönünde:
-    # A sol üst, B sol alt, C sağ alt, D sağ üst
     region_angles = {
         "A": (180, 270),
         "B": (90, 180),
@@ -274,224 +309,113 @@ def build_group_svg(
         "D": (270, 360),
     }
 
-    inner_start = 58
-    ring_width = 58
-    ring_gap = 0
+    def polar(radius: float, angle_deg: float) -> tuple[float, float]:
+        angle = math.radians(angle_deg)
+        return (
+            cx + radius * math.cos(angle),
+            cy + radius * math.sin(angle),
+        )
+
+    def sector_path(inner_r: float, outer_r: float, start: float, end: float) -> str:
+        x1, y1 = polar(outer_r, start)
+        x2, y2 = polar(outer_r, end)
+        x3, y3 = polar(inner_r, end)
+        x4, y4 = polar(inner_r, start)
+        large = 1 if (end - start) > 180 else 0
+        return (
+            f"M {x1:.2f},{y1:.2f} "
+            f"A {outer_r},{outer_r} 0 {large},1 {x2:.2f},{y2:.2f} "
+            f"L {x3:.2f},{y3:.2f} "
+            f"A {inner_r},{inner_r} 0 {large},0 {x4:.2f},{y4:.2f} Z"
+        )
 
     active_set = set(active_combo)
+    svg_parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="white"/>',
+        '<text x="390" y="34" text-anchor="middle" font-size="24" font-weight="800" fill="#123B6D">AYÇA Çembersel Grup ve Eşlenik Simülasyonu</text>',
+        '<text x="390" y="61" text-anchor="middle" font-size="13" fill="#667085">İç halkadan dış halkaya 1 → 2 → 3 → 4 alt grupları</text>',
+    ]
 
-    background = []
-    active_shapes = []
-    labels = []
-    selected_overlays = []
-
-    # Merkez daire.
-    background.append(
-        f'<circle cx="{cx}" cy="{cy}" r="{inner_start}" fill="#FFFFFF" '
-        f'stroke="#111827" stroke-width="3"/>'
-    )
-
-    # Ana eksen çizgileri.
-    axis_r = inner_start + 4 * ring_width
-    background.extend([
-        f'<line x1="{cx-axis_r}" y1="{cy}" x2="{cx+axis_r}" y2="{cy}" stroke="#111827" stroke-width="2.5"/>',
-        f'<line x1="{cx}" y1="{cy-axis_r}" x2="{cx}" y2="{cy+axis_r}" stroke="#111827" stroke-width="2.5"/>',
-    ])
-
-    # Halkalar ve sektörler.
-    for subgroup_no in range(1, 5):
-        inner_r = inner_start + (subgroup_no - 1) * ring_width
-        outer_r = inner_r + ring_width
-
-        background.append(
-            f'<circle cx="{cx}" cy="{cy}" r="{outer_r}" fill="none" '
-            f'stroke="#111827" stroke-width="2.5"/>'
-        )
-
+    inner_radius = 0
+    for ring_index, outer_radius in enumerate(radii, start=1):
         for region, (start_angle, end_angle) in region_angles.items():
-            group_name = f"{region}{subgroup_no}"
-            path = annular_sector_path(
-                cx,
-                cy,
-                inner_r,
-                outer_r,
-                start_angle,
-                end_angle,
+            group_name = f"{region}{ring_index}"
+            active = group_name in active_set
+            selected = group_name in selected_by_group
+
+            fill = region_colors[region] if active else "#FFFFFF"
+            fill_opacity = "0.95" if active else "1"
+            stroke = "#079455" if selected else "#101828"
+            stroke_width = "4" if selected else "2"
+
+            svg_parts.append(
+                f'<path d="{sector_path(inner_radius, outer_radius, start_angle, end_angle)}" '
+                f'fill="{fill}" fill-opacity="{fill_opacity}" stroke="{stroke}" stroke-width="{stroke_width}"/>'
             )
 
-            if group_name in active_set:
-                active_shapes.append(
-                    f'<path d="{path}" fill="{region_colors[region]}" '
-                    f'fill-opacity="0.93" stroke="#111827" stroke-width="2"/>'
-                )
-
-            if group_name in selected_by_group:
-                selected_overlays.append(
-                    f'<path d="{path}" fill="none" stroke="#16A34A" '
-                    f'stroke-width="7" opacity="0.98"/>'
-                )
-
-            # Etiket konumu sektörün ortasında.
-            mid_angle = (start_angle + end_angle) / 2
-            mid_radius = (inner_r + outer_r) / 2
-            tx, ty = polar(cx, cy, mid_radius, mid_angle)
-
-            is_active = group_name in active_set
-            label_color = "#FFFFFF" if is_active else "#344054"
-
-            labels.append(
-                f'<text x="{tx:.2f}" y="{ty+5:.2f}" text-anchor="middle" '
-                f'font-size="15" font-weight="800" fill="{label_color}">{group_name}</text>'
-            )
-
+            label_radius = (inner_radius + outer_radius) / 2
+            label_angle = (start_angle + end_angle) / 2
+            lx, ly = polar(label_radius, label_angle)
+            text_color = "#FFFFFF" if active else "#123B6D"
             count = int((pharmacies["group"] == group_name).sum())
-            count_radius = mid_radius + 16
-            c_tx, c_ty = polar(cx, cy, count_radius, mid_angle)
 
-            labels.append(
-                f'<text x="{c_tx:.2f}" y="{c_ty+20:.2f}" text-anchor="middle" '
-                f'font-size="10" fill="{"#FFFFFF" if is_active else "#667085"}">'
-                f'{count} eczane</text>'
+            svg_parts.append(
+                f'<text x="{lx:.2f}" y="{ly:.2f}" text-anchor="middle" '
+                f'font-size="14" font-weight="800" fill="{text_color}">{group_name}</text>'
+            )
+            svg_parts.append(
+                f'<text x="{lx:.2f}" y="{ly + 15:.2f}" text-anchor="middle" '
+                f'font-size="9" fill="{text_color}">{count} eczane</text>'
             )
 
-            if group_name in selected_by_group:
-                pid = selected_by_group[group_name]
-                name_series = pharmacies.loc[
-                    pharmacies["pharmacy_id"] == pid,
-                    "pharmacy_name",
-                ]
-                if not name_series.empty:
-                    name_radius = outer_r + 18
-                    n_tx, n_ty = polar(cx, cy, name_radius, mid_angle)
-                    labels.append(
-                        f'<text x="{n_tx:.2f}" y="{n_ty:.2f}" text-anchor="middle" '
-                        f'font-size="12" font-weight="800" fill="#15803D">'
-                        f'{escape(name_series.iloc[0])}</text>'
-                    )
+        inner_radius = outer_radius
 
-    # Bölge başlıkları.
-    region_title_positions = {
-        "A": (cx - 255, cy - 255),
-        "B": (cx - 255, cy + 275),
-        "C": (cx + 255, cy + 275),
-        "D": (cx + 255, cy - 255),
-    }
-
-    region_titles = []
-    for region, (tx, ty) in region_title_positions.items():
-        region_titles.append(
-            f'<text x="{tx}" y="{ty}" text-anchor="middle" '
-            f'font-size="22" font-weight="900" fill="{region_colors[region]}">'
-            f'{region} BÖLGESİ</text>'
-        )
-
-    # Aktif kombinasyonu merkezde göster.
-    combo_text = "  •  ".join(active_combo)
-    center_text = f"""
-      <text x="{cx}" y="{cy-8}" text-anchor="middle"
-            font-size="13" font-weight="700" fill="#667085">AKTİF</text>
-      <text x="{cx}" y="{cy+14}" text-anchor="middle"
-            font-size="14" font-weight="900" fill="#123B6D">{combo_text}</text>
-    """
-
-    # Sağ panel: seçilen eşlenikler.
-    selected_cards = []
-    panel_x = 920
-    panel_y = 170
-
-    selected_cards.append(
-        f'<rect x="{panel_x}" y="{panel_y}" width="225" height="420" rx="18" '
-        f'fill="#F8FAFC" stroke="#D0D5DD" stroke-width="1.5"/>'
-    )
-    selected_cards.append(
-        f'<text x="{panel_x+112}" y="{panel_y+38}" text-anchor="middle" '
-        f'font-size="18" font-weight="900" fill="#123B6D">Canlı Eşlenik Seçimi</text>'
+    svg_parts.extend(
+        [
+            f'<text x="{cx - 285}" y="{cy - 285}" font-size="20" font-weight="800" fill="#38A3E1">A BÖLGESİ</text>',
+            f'<text x="{cx - 285}" y="{cy + 285}" font-size="20" font-weight="800" fill="#16C96F">B BÖLGESİ</text>',
+            f'<text x="{cx + 175}" y="{cy + 285}" font-size="20" font-weight="800" fill="#F39ACD">C BÖLGESİ</text>',
+            f'<text x="{cx + 175}" y="{cy - 285}" font-size="20" font-weight="800" fill="#B444ED">D BÖLGESİ</text>',
+            f'<circle cx="{cx}" cy="{cy}" r="52" fill="white" stroke="#101828" stroke-width="2"/>',
+            f'<text x="{cx}" y="{cy - 8}" text-anchor="middle" font-size="11" fill="#667085">AKTİF</text>',
+            f'<text x="{cx}" y="{cy + 12}" text-anchor="middle" font-size="15" font-weight="800" fill="#123B6D">{" • ".join(active_combo)}</text>',
+        ]
     )
 
-    card_y = panel_y + 72
-    for group_name in active_combo:
-        selected_pid = selected_by_group.get(group_name)
-        selected_name = "Henüz seçilmedi"
+    panel_x = 720
+    svg_parts.append(
+        f'<rect x="{panel_x}" y="120" width="230" height="430" rx="18" fill="#F8FAFC" stroke="#D0D5DD"/>'
+    )
+    svg_parts.append(
+        f'<text x="{panel_x + 22}" y="160" font-size="17" font-weight="800" fill="#123B6D">Canlı Eşlenik Seçimi</text>'
+    )
 
-        if selected_pid is not None:
-            selected_name_series = pharmacies.loc[
-                pharmacies["pharmacy_id"] == selected_pid,
-                "pharmacy_name",
+    for index, group_name in enumerate(active_combo):
+        y = 190 + index * 77
+        region = group_name[0]
+        selected_id = selected_by_group.get(group_name)
+        if selected_id is None:
+            selected_text = "Henüz seçilmedi"
+            sub_text = "Haritadan eczane seçin"
+        else:
+            match = pharmacies[pharmacies["pharmacy_id"] == int(selected_id)]
+            selected_text = (
+                str(match.iloc[0]["pharmacy_name"])
+                if not match.empty
+                else "Seçildi"
+            )
+            sub_text = "Seçim tamamlandı"
+
+        svg_parts.extend(
+            [
+                f'<rect x="{panel_x + 18}" y="{y}" width="194" height="62" rx="14" fill="white" stroke="#D0D5DD"/>',
+                f'<circle cx="{panel_x + 48}" cy="{y + 31}" r="18" fill="{region_colors[region]}"/>',
+                f'<text x="{panel_x + 48}" y="{y + 36}" text-anchor="middle" font-size="12" font-weight="800" fill="white">{group_name}</text>',
+                f'<text x="{panel_x + 78}" y="{y + 26}" font-size="12" font-weight="800" fill="#123B6D">{selected_text}</text>',
+                f'<text x="{panel_x + 78}" y="{y + 45}" font-size="10" fill="#98A2B3">{sub_text}</text>',
             ]
-            if not selected_name_series.empty:
-                selected_name = selected_name_series.iloc[0]
-
-        selected = selected_pid is not None
-        card_color = "#ECFDF3" if selected else "#FFFFFF"
-        border_color = "#16A34A" if selected else "#D0D5DD"
-
-        selected_cards.append(
-            f'<rect x="{panel_x+18}" y="{card_y}" width="189" height="62" rx="12" '
-            f'fill="{card_color}" stroke="{border_color}" stroke-width="2"/>'
         )
-        selected_cards.append(
-            f'<circle cx="{panel_x+48}" cy="{card_y+31}" r="18" '
-            f'fill="{region_colors[group_name[0]]}"/>'
-        )
-        selected_cards.append(
-            f'<text x="{panel_x+48}" y="{card_y+36}" text-anchor="middle" '
-            f'font-size="13" font-weight="900" fill="#FFFFFF">{group_name}</text>'
-        )
-        selected_cards.append(
-            f'<text x="{panel_x+78}" y="{card_y+25}" '
-            f'font-size="13" font-weight="800" fill="#344054">'
-            f'{escape(selected_name)}</text>'
-        )
-        selected_cards.append(
-            f'<text x="{panel_x+78}" y="{card_y+44}" '
-            f'font-size="11" fill="{"#15803D" if selected else "#98A2B3"}">'
-            f'{"Seçim tamamlandı" if selected else "Haritadan eczane seçin"}</text>'
-        )
-        card_y += 76
 
-    svg = f"""
-    <div style="
-      width:100%;
-      background:white;
-      border:1px solid #E4E7EC;
-      border-radius:18px;
-      padding:8px;
-      overflow:hidden;">
-      <svg width="100%" viewBox="0 0 {width} {height}"
-           xmlns="http://www.w3.org/2000/svg">
-        <rect width="100%" height="100%" rx="18" fill="#FFFFFF"/>
-
-        <text x="{cx}" y="42" text-anchor="middle"
-              font-size="28" font-weight="900" fill="#123B6D">
-          AYÇA Çembersel Grup ve Eşlenik Simülasyonu
-        </text>
-        <text x="{cx}" y="70" text-anchor="middle"
-              font-size="14" fill="#667085">
-          İç halkadan dış halkaya: 1 → 2 → 3 → 4 alt grupları
-        </text>
-
-        {''.join(active_shapes)}
-        {''.join(background)}
-        {''.join(selected_overlays)}
-        {''.join(labels)}
-        {''.join(region_titles)}
-        {center_text}
-        {''.join(selected_cards)}
-
-        <g transform="translate(58,760)">
-          <rect x="0" y="-15" width="26" height="18" rx="4"
-                fill="#0EA5E9" opacity="0.93"/>
-          <text x="36" y="0" font-size="13" fill="#344054">
-            Aktif grup sektörü
-          </text>
-
-          <rect x="180" y="-15" width="26" height="18" rx="4"
-                fill="none" stroke="#16A34A" stroke-width="4"/>
-          <text x="216" y="0" font-size="13" fill="#344054">
-            Eczane seçimi tamamlanan grup
-          </text>
-        </g>
-      </svg>
-    </div>
-    """
-    return svg
+    svg_parts.append("</svg>")
+    return "".join(svg_parts)
