@@ -218,14 +218,60 @@ st.markdown(
             width: 1px;
             overflow: hidden;
         }
+
+        .product-header {
+            border: 1px solid #E4E7EC;
+            border-radius: 20px;
+            padding: 20px 24px;
+            margin: 4px 0 18px 0;
+            background:
+                radial-gradient(circle at top right, rgba(37,99,235,.10), transparent 32%),
+                linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%);
+            box-shadow: 0 8px 24px rgba(16,24,40,.06);
+        }
+
+        .product-kicker {
+            color: #2563EB;
+            font-size: 12px;
+            font-weight: 900;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .product-title {
+            color: #123B6D;
+            font-size: 32px;
+            line-height: 1.12;
+            font-weight: 900;
+            margin: 0;
+        }
+
+        .product-subtitle {
+            color: #667085;
+            font-size: 15px;
+            margin-top: 8px;
+        }
+
+        .product-date {
+            display: inline-block;
+            margin-top: 13px;
+            padding: 7px 11px;
+            border-radius: 999px;
+            background: #EFF6FF;
+            color: #1D4ED8;
+            border: 1px solid #BFDBFE;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .timeline-caption {
+            color: #667085;
+            font-size: 12px;
+            margin: 2px 0 8px 0;
+        }
     </style>
     """,
-    unsafe_allow_html=True,
-)
-
-st.markdown('<div class="ayca-title">AYÇA Nöbet — Uşak Grup Simülasyonu</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="ayca-subtitle">Bugünün nöbet gruplarını, uygun eczaneleri ve oluşturulan planı canlı olarak inceleyin</div>',
     unsafe_allow_html=True,
 )
 
@@ -1055,6 +1101,10 @@ def sync_plan_calendar_date() -> None:
         ]
         if selected_date in generated_dates:
             st.session_state.auto_view_date = selected_date
+        elif st.session_state.get("planning_mode") == "Otomatik Çok Günlük Plan":
+            # Plan dışında bir tarih seçilmişse tarih korunur; plan tablosu
+            # o gün için atama olmadığını açıkça gösterir.
+            st.session_state.auto_view_date = generated_dates[0]
 
 
 with st.sidebar:
@@ -1269,13 +1319,19 @@ if planning_mode == "Otomatik Çok Günlük Plan":
             st.session_state.auto_view_date
         )
 
-        auto_prev_col, auto_date_col, auto_next_col = st.columns(
-            [1, 3, 1]
+        st.markdown("#### Otomatik Plan Günleri")
+        st.markdown(
+            '<div class="timeline-caption">'
+            'Bir güne tıklayın; üst özet, harita, grup yapısı ve plan birlikte değişir.'
+            '</div>',
+            unsafe_allow_html=True,
         )
 
-        with auto_prev_col:
+        previous_col, date_label_col, next_col = st.columns([1, 3, 1])
+
+        with previous_col:
             if st.button(
-                "← Önceki",
+                "← Önceki Gün",
                 key="auto_previous_date_button",
                 use_container_width=True,
                 disabled=auto_date_index == 0,
@@ -1287,25 +1343,14 @@ if planning_mode == "Otomatik Çok Günlük Plan":
                 st.session_state.plan_calendar_picker = new_date
                 st.rerun()
 
-        with auto_date_col:
-            selected_auto_date = st.selectbox(
-                "Haritada gösterilecek otomatik plan günü",
-                options=available_auto_dates,
-                index=auto_date_index,
-                format_func=lambda value: value.strftime("%d.%m.%Y"),
-                key="auto_view_date_selector",
+        with date_label_col:
+            st.markdown(
+                f"### {st.session_state.auto_view_date.strftime('%d.%m.%Y')}"
             )
 
-            if selected_auto_date != st.session_state.auto_view_date:
-                st.session_state.auto_view_date = selected_auto_date
-                st.session_state.canonical_current_date = selected_auto_date
-                st.session_state.plan_calendar_date = selected_auto_date
-                st.session_state.plan_calendar_picker = selected_auto_date
-                st.rerun()
-
-        with auto_next_col:
+        with next_col:
             if st.button(
-                "Sonraki →",
+                "Sonraki Gün →",
                 key="auto_next_date_button",
                 use_container_width=True,
                 disabled=auto_date_index >= len(available_auto_dates) - 1,
@@ -1316,6 +1361,35 @@ if planning_mode == "Otomatik Çok Günlük Plan":
                 st.session_state.plan_calendar_date = new_date
                 st.session_state.plan_calendar_picker = new_date
                 st.rerun()
+
+        # Tarihleri yatay bir zaman çizgisi gibi göster.
+        for row_start in range(0, len(available_auto_dates), 7):
+            row_dates = available_auto_dates[row_start:row_start + 7]
+            row_columns = st.columns(len(row_dates))
+
+            for column, timeline_date in zip(row_columns, row_dates):
+                is_selected = (
+                    timeline_date == st.session_state.auto_view_date
+                )
+                button_label = (
+                    f"● {timeline_date.day}"
+                    if is_selected
+                    else str(timeline_date.day)
+                )
+
+                with column:
+                    if st.button(
+                        button_label,
+                        key=f"auto_timeline_{timeline_date.isoformat()}",
+                        use_container_width=True,
+                        type="primary" if is_selected else "secondary",
+                        help=timeline_date.strftime("%d.%m.%Y"),
+                    ):
+                        st.session_state.auto_view_date = timeline_date
+                        st.session_state.canonical_current_date = timeline_date
+                        st.session_state.plan_calendar_date = timeline_date
+                        st.session_state.plan_calendar_picker = timeline_date
+                        st.rerun()
 
         # canonical_current_date; takvim, özet, harita ve planın
         # ortak tarihidir. Otomatik gün seçicisi yalnızca kullanıcı
@@ -1391,6 +1465,31 @@ month_names = {
 }
 date_text = f"{current_date.day:02d} {month_names[current_date.month]} {current_date.year}"
 
+mode_text = (
+    "Manuel planlama"
+    if planning_mode == "Tek Gün / Manuel Seçim"
+    else "Otomatik çok günlük plan"
+)
+
+st.markdown(
+    dedent(
+        f"""
+        <div class="product-header">
+          <div class="product-kicker">AYÇA NÖBET · UŞAK DEMOSU</div>
+          <div class="product-title">Uşak Nöbet Planlama Merkezi</div>
+          <div class="product-subtitle">
+            Harita, grup yapısı ve oluşturulan plan tek tarih üzerinden
+            canlı olarak senkronize edilir.
+          </div>
+          <div class="product-date">
+            {date_text} · {weekday_text} · {mode_text}
+          </div>
+        </div>
+        """
+    ).strip(),
+    unsafe_allow_html=True,
+)
+
 group_colors = {
     "A": "#2563EB",
     "B": "#16A34A",
@@ -1412,7 +1511,7 @@ st.markdown(
     dedent(
         f"""
         <div class="summary-wrap">
-      <div class="summary-title">Bugünün Nöbet Özeti</div>
+      <div class="summary-title">Seçilen Günün Nöbet Özeti</div>
       <div class="summary-grid">
 
         <div class="summary-item">
@@ -1422,13 +1521,13 @@ st.markdown(
         </div>
 
         <div class="summary-item">
-          <div class="summary-label">Bugünkü Nöbet Grupları</div>
+          <div class="summary-label">Aktif Nöbet Grupları</div>
           <div class="group-row">{group_chips}</div>
           <div class="summary-sub">Her gruptan bir eczane seçilir</div>
         </div>
 
         <div class="summary-item">
-          <div class="summary-label">Bugün Görev Alacak</div>
+          <div class="summary-label">Görev Alacak</div>
           <div class="summary-value">{len(active_groups)} eczane</div>
           <div class="summary-sub">{len(selected_ids)} atama tamamlandı</div>
         </div>
@@ -1484,7 +1583,7 @@ with tab_map:
 
     base_map_df = pharmacies.copy()
     base_map_df["status"] = "inactive"
-    base_map_df["reason"] = "Bugünkü aktif kombinasyonda değil"
+    base_map_df["reason"] = "Seçilen günün aktif kombinasyonunda değil"
     base_map_df["decision_score"] = None
     base_map_df["distance_to_nearest_selected_km"] = None
     base_map_df["days_since_last_duty"] = None
@@ -1526,7 +1625,7 @@ with tab_map:
             '<div class="sticky-map-anchor"></div>',
             unsafe_allow_html=True,
         )
-        st.subheader("Bugün Seçilebilecek Eczaneler")
+        st.subheader("Seçilen Gün İçin Eczane Haritası")
         st.caption("Harita dört ana bölge ve merkezden dışa doğru dört halka halinde düzenlenmiştir. Bir eczane işaretine tıklayarak seçim yapın.")
 
         selected_df = base_map_df[base_map_df["status"] == "selected"].copy()
@@ -1835,6 +1934,9 @@ with tab_plan:
             f"### {st.session_state.canonical_current_date.day} "
             f"{month_names[st.session_state.canonical_current_date.month]} "
             f"{st.session_state.canonical_current_date.year}"
+        )
+        st.caption(
+            "Bu tarih; üst özet, harita, grup yapısı ve aşağıdaki tablo için ortaktır."
         )
 
     # Bütün ekranlarda kullanılan tek tarih.
