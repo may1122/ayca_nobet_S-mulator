@@ -127,62 +127,52 @@ st.markdown(
             .summary-grid {grid-template-columns: 1fr 1fr;}
         }
 
-        /* Harita sütununu masaüstünde görünür tutar. */
-        @media (min-width: 901px) {
-            div[data-testid="stHorizontalBlock"]:has(.sticky-map-anchor) > div:first-child {
-                position: sticky;
-                top: 0.75rem;
-                align-self: flex-start;
-                z-index: 5;
-            }
-        }
-
-        .selection-grid {
+        .plan-grid {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 10px;
-            margin: 8px 0 18px 0;
+            gap: 12px;
+            margin: 10px 0 18px 0;
         }
 
-        .selection-card {
+        .plan-card {
             border: 1px solid #E4E7EC;
-            border-radius: 14px;
+            border-radius: 16px;
             background: #FFFFFF;
-            padding: 14px;
-            min-height: 132px;
-            box-shadow: 0 4px 14px rgba(16,24,40,.04);
+            padding: 15px;
+            min-height: 148px;
+            box-shadow: 0 6px 18px rgba(16,24,40,.05);
         }
 
-        .selection-card.empty {
+        .plan-card.empty {
             background: #F8FAFC;
             border-style: dashed;
         }
 
-        .selection-group {
+        .plan-group {
             font-size: 12px;
             font-weight: 900;
             color: #667085;
             margin-bottom: 8px;
         }
 
-        .selection-name {
-            font-size: 17px;
-            font-weight: 900;
+        .plan-name {
             color: #123B6D;
+            font-size: 18px;
+            font-weight: 900;
             line-height: 1.2;
-            margin-bottom: 7px;
+            margin-bottom: 8px;
         }
 
-        .selection-meta {
+        .plan-detail {
             color: #667085;
             font-size: 12px;
-            line-height: 1.45;
+            line-height: 1.5;
         }
 
-        .selection-source {
+        .plan-source {
             display: inline-block;
-            margin-top: 9px;
-            padding: 5px 8px;
+            margin-top: 10px;
+            padding: 5px 9px;
             border-radius: 999px;
             background: #EFF6FF;
             color: #1D4ED8;
@@ -190,12 +180,20 @@ st.markdown(
             font-weight: 800;
         }
 
+        .plan-section {
+            border: 1px solid #E4E7EC;
+            border-radius: 18px;
+            background: #FFFFFF;
+            padding: 16px;
+            box-shadow: 0 6px 18px rgba(16,24,40,.04);
+        }
+
         @media (max-width: 1100px) {
-            .selection-grid {grid-template-columns: 1fr 1fr;}
+            .plan-grid {grid-template-columns: 1fr 1fr;}
         }
 
         @media (max-width: 650px) {
-            .selection-grid {grid-template-columns: 1fr;}
+            .plan-grid {grid-template-columns: 1fr;}
         }
     </style>
     """,
@@ -355,11 +353,11 @@ def selection_reason(row: pd.Series) -> str:
     )
 
 
-def build_selected_plan_cards(
+def build_plan_cards(
     active_groups: list[str],
     selected_by_group: dict,
-    base_map_df: pd.DataFrame,
-    selection_meta_by_group: dict,
+    source_by_group: dict,
+    candidates_by_group: dict[str, pd.DataFrame],
 ) -> str:
     cards = []
 
@@ -369,37 +367,46 @@ def build_selected_plan_cards(
         if pid is None:
             cards.append(
                 f"""
-                <div class="selection-card empty">
-                  <div class="selection-group">{group_name} GRUBU</div>
-                  <div class="selection-name">Henüz seçilmedi</div>
-                  <div class="selection-meta">Haritadaki yeşil adaylardan birini seçin.</div>
+                <div class="plan-card empty">
+                  <div class="plan-group">{group_name} GRUBU</div>
+                  <div class="plan-name">Henüz seçilmedi</div>
+                  <div class="plan-detail">
+                    Harita sekmesindeki yeşil adaylardan bir eczane seçin.
+                  </div>
                 </div>
                 """
             )
             continue
 
-        match = base_map_df.loc[base_map_df["pharmacy_id"] == pid]
-        if match.empty:
-            continue
+        group_df = candidates_by_group.get(group_name, pd.DataFrame())
+        match = group_df.loc[group_df["pharmacy_id"] == pid] if not group_df.empty else pd.DataFrame()
 
-        row = match.iloc[0]
-        meta = selection_meta_by_group.get(group_name, {})
-        source = meta.get("source", "Mevcut seçim")
+        if match.empty:
+            pharmacy_match = pharmacies.loc[pharmacies["pharmacy_id"] == pid]
+            if pharmacy_match.empty:
+                continue
+            row = pharmacy_match.iloc[0].copy()
+            row["decision_score"] = 0
+            row["days_since_last_duty"] = None
+        else:
+            row = match.iloc[0]
+
+        source = source_by_group.get(group_name, "Mevcut seçim")
 
         cards.append(
             f"""
-            <div class="selection-card">
-              <div class="selection-group">{group_name} GRUBU</div>
-              <div class="selection-name">{row["pharmacy_name"]}</div>
-              <div class="selection-meta">{selection_reason(row)}</div>
-              <div class="selection-source">{source}</div>
+            <div class="plan-card">
+              <div class="plan-group">{group_name} GRUBU</div>
+              <div class="plan-name">{row["pharmacy_name"]}</div>
+              <div class="plan-detail">{selection_reason(row)}</div>
+              <div class="plan-source">{source}</div>
             </div>
             """
         )
 
     return dedent(
         f"""
-        <div class="selection-grid">
+        <div class="plan-grid">
           {''.join(cards)}
         </div>
         """
@@ -494,8 +501,8 @@ if "state" not in st.session_state:
 if "selected_by_group" not in st.session_state:
     st.session_state.selected_by_group = {}
 
-if "selection_meta_by_group" not in st.session_state:
-    st.session_state.selection_meta_by_group = {}
+if "selection_source_by_group" not in st.session_state:
+    st.session_state.selection_source_by_group = {}
 
 state: SimulationState = st.session_state.state
 
@@ -524,7 +531,7 @@ with st.sidebar:
 
     if st.button("Seçimleri Temizle", use_container_width=True):
         st.session_state.selected_by_group = {}
-        st.session_state.selection_meta_by_group = {}
+        st.session_state.selection_source_by_group = {}
         st.rerun()
 
     if st.button("Günü Otomatik Tamamla", type="primary", use_container_width=True):
@@ -553,11 +560,8 @@ with st.sidebar:
                 temp_state.apply_assignment(pharmacy_id, current_date)
 
         st.session_state.selected_by_group = chosen
-        st.session_state.selection_meta_by_group = {
-            group_name: {
-                "source": "AYÇA otomatik öneri",
-                "selected_on": current_date.isoformat(),
-            }
+        st.session_state.selection_source_by_group = {
+            group_name: "AYÇA otomatik öneri"
             for group_name in chosen
         }
         st.rerun()
@@ -710,7 +714,6 @@ with tab_map:
     ).fillna(80)
 
     with left:
-        st.markdown('<div class="sticky-map-anchor"></div>', unsafe_allow_html=True)
         st.subheader("Bugün Seçilebilecek Eczaneler")
         st.caption("Bir eczane işaretine tıklayın. Sistem uygunluk puanını ve tüm karar kontrollerini canlı gösterir.")
 
@@ -747,10 +750,7 @@ with tab_map:
                 previous = st.session_state.selected_by_group.get(clicked_group)
                 if previous != clicked_id:
                     st.session_state.selected_by_group[clicked_group] = int(clicked_id)
-                    st.session_state.selection_meta_by_group[clicked_group] = {
-                        "source": "Haritadan manuel seçim",
-                        "selected_on": current_date.isoformat(),
-                    }
+                    st.session_state.selection_source_by_group[clicked_group] = "Haritadan manuel seçim"
                     st.toast(
                         f'{clicked_row["pharmacy_name"]}, {clicked_group} grubu için seçildi.',
                         icon="✅",
@@ -836,14 +836,11 @@ with tab_map:
 
             if chosen is not None and chosen != current_pid:
                 st.session_state.selected_by_group[group_name] = int(chosen)
-                st.session_state.selection_meta_by_group[group_name] = {
-                    "source": "Listeden manuel seçim",
-                    "selected_on": current_date.isoformat(),
-                }
+                st.session_state.selection_source_by_group[group_name] = "Listeden manuel seçim"
                 st.rerun()
             elif chosen is None and current_pid is not None:
                 st.session_state.selected_by_group.pop(group_name, None)
-                st.session_state.selection_meta_by_group.pop(group_name, None)
+                st.session_state.selection_source_by_group.pop(group_name, None)
                 st.rerun()
 
             if current_pid is not None:
@@ -935,55 +932,32 @@ with tab_groups:
 with tab_plan:
     st.subheader("Oluşturulan Nöbet Planı")
     st.caption(
-        "Bugünkü kesin seçimler üstte yan yana gösterilir. Seçim yöntemi ve karar gerekçesi her eczane için ayrıca kaydedilir."
+        "Bugünkü seçimler, seçim yöntemi ve AYÇA karar gerekçeleriyle birlikte gösterilir."
     )
 
-    plan_status_frames = []
-    for g in active_groups:
-        plan_status_frames.append(
-            eligible_candidates(
-                pharmacies=pharmacies,
-                group_name=g,
-                selected_ids=selected_ids,
-                state=state,
-                current_date=current_date,
-                min_distance_km=min_distance_km,
-                min_gap_days=min_gap_days,
-            )
+    candidates_by_group = {}
+    for group_name in active_groups:
+        candidates_by_group[group_name] = eligible_candidates(
+            pharmacies=pharmacies,
+            group_name=group_name,
+            selected_ids=selected_ids,
+            state=state,
+            current_date=current_date,
+            min_distance_km=min_distance_km,
+            min_gap_days=min_gap_days,
         )
 
-    plan_status_df = pd.concat(plan_status_frames, ignore_index=True)
-
-    plan_base_df = pharmacies.copy()
-    plan_base_df["decision_score"] = None
-    plan_base_df["distance_to_nearest_selected_km"] = None
-    plan_base_df["days_since_last_duty"] = None
-    plan_base_df["selectable"] = False
-
-    plan_lookup = plan_status_df.set_index("pharmacy_id")
-    for idx, pharmacy_row in plan_base_df.iterrows():
-        pid = pharmacy_row["pharmacy_id"]
-        if pid in plan_lookup.index:
-            info = plan_lookup.loc[pid]
-            if isinstance(info, pd.DataFrame):
-                info = info.iloc[0]
-            for column in [
-                "decision_score",
-                "distance_to_nearest_selected_km",
-                "days_since_last_duty",
-                "selectable",
-            ]:
-                plan_base_df.at[idx, column] = info[column]
-
-    selected_cards_html = build_selected_plan_cards(
-        active_groups=active_groups,
-        selected_by_group=st.session_state.selected_by_group,
-        base_map_df=plan_base_df,
-        selection_meta_by_group=st.session_state.selection_meta_by_group,
+    st.markdown(
+        build_plan_cards(
+            active_groups=active_groups,
+            selected_by_group=st.session_state.selected_by_group,
+            source_by_group=st.session_state.selection_source_by_group,
+            candidates_by_group=candidates_by_group,
+        ),
+        unsafe_allow_html=True,
     )
-    st.markdown(selected_cards_html, unsafe_allow_html=True)
 
-    plan_left, plan_right = st.columns([1.35, 1], gap="large")
+    plan_left, plan_right = st.columns([1.45, 1], gap="large")
 
     with plan_left:
         st.markdown("### İleri Tarih Planı")
@@ -1000,18 +974,19 @@ with tab_plan:
 
         for day_idx in range(days_to_show):
             sim_date = start_date + timedelta(days=day_idx)
-            chosen_for_day = []
+            selected_for_day = []
 
             for group_name in group_for_day(day_idx):
                 result = eligible_candidates(
                     pharmacies=pharmacies,
                     group_name=group_name,
-                    selected_ids=chosen_for_day,
+                    selected_ids=selected_for_day,
                     state=temp_state,
                     current_date=sim_date,
                     min_distance_km=min_distance_km,
                     min_gap_days=min_gap_days,
                 )
+
                 valid = result[result["selectable"]].sort_values(
                     "decision_score",
                     ascending=False,
@@ -1024,84 +999,106 @@ with tab_plan:
                             "Grup": group_name,
                             "Eczane": "Uygun aday bulunamadı",
                             "Skor": None,
-                            "Seçim Yöntemi": "Kontrol gerekli",
+                            "Yöntem": "Manuel kontrol",
                         }
                     )
                     continue
 
-                row = valid.iloc[0]
-                pid = int(row["pharmacy_id"])
-                chosen_for_day.append(pid)
-                temp_state.apply_assignment(pid, sim_date)
+                selected_row = valid.iloc[0]
+                pharmacy_id = int(selected_row["pharmacy_id"])
+                selected_for_day.append(pharmacy_id)
+                temp_state.apply_assignment(pharmacy_id, sim_date)
 
                 schedule_rows.append(
                     {
                         "Tarih": sim_date.strftime("%d.%m.%Y"),
                         "Grup": group_name,
-                        "Eczane": row["pharmacy_name"],
-                        "Skor": round(float(row["decision_score"]), 1),
-                        "Seçim Yöntemi": "AYÇA otomatik öneri",
+                        "Eczane": selected_row["pharmacy_name"],
+                        "Skor": round(float(selected_row["decision_score"]), 1),
+                        "Yöntem": "AYÇA otomatik öneri",
                     }
                 )
 
         schedule_df = pd.DataFrame(schedule_rows)
-        st.dataframe(
-            schedule_df,
-            use_container_width=True,
-            hide_index=True,
-            height=520,
-        )
+
+        if schedule_df.empty:
+            st.warning("Plan oluşturulamadı.")
+        else:
+            st.dataframe(
+                schedule_df,
+                use_container_width=True,
+                hide_index=True,
+                height=510,
+            )
 
     with plan_right:
         st.markdown("### Bugünkü Seçim Detayları")
 
         if not st.session_state.selected_by_group:
-            st.info("Henüz seçim yapılmadı. Eczane Haritası sekmesinden yeşil adayları seçin.")
+            st.info(
+                "Henüz eczane seçilmedi. Eczane Haritası sekmesinden yeşil adaylardan seçim yapın."
+            )
         else:
             for group_name in active_groups:
-                pid = st.session_state.selected_by_group.get(group_name)
-                if pid is None:
+                pharmacy_id = st.session_state.selected_by_group.get(group_name)
+                if pharmacy_id is None:
                     continue
 
-                row_match = plan_base_df.loc[plan_base_df["pharmacy_id"] == pid]
-                if row_match.empty:
+                group_df = candidates_by_group.get(group_name, pd.DataFrame())
+                match = group_df.loc[group_df["pharmacy_id"] == pharmacy_id]
+
+                if match.empty:
                     continue
 
-                row = row_match.iloc[0]
-                meta = st.session_state.selection_meta_by_group.get(group_name, {})
-                source = meta.get("source", "Mevcut seçim")
+                selected_row = match.iloc[0]
+                source = st.session_state.selection_source_by_group.get(
+                    group_name,
+                    "Mevcut seçim",
+                )
 
                 with st.container(border=True):
-                    st.markdown(f"#### {group_name} · {row['pharmacy_name']}")
+                    st.markdown(
+                        f"#### {group_name} · {selected_row['pharmacy_name']}"
+                    )
                     st.caption(source)
 
-                    m1, m2, m3 = st.columns(3)
-                    m1.metric(
+                    metric_1, metric_2, metric_3 = st.columns(3)
+
+                    metric_1.metric(
                         "Uygunluk",
-                        f"%{float(row.get('decision_score', 0) or 0):.0f}",
+                        f"%{float(selected_row['decision_score']):.0f}",
                     )
 
-                    gap = row.get("days_since_last_duty")
-                    gap_value = "-" if gap is None or pd.isna(gap) else f"{int(gap)} gün"
-                    m2.metric("Son nöbet arası", gap_value)
-                    m3.metric(
+                    gap = selected_row.get("days_since_last_duty")
+                    gap_text = (
+                        "-"
+                        if gap is None or pd.isna(gap)
+                        else f"{int(gap)} gün"
+                    )
+                    metric_2.metric("Son nöbet arası", gap_text)
+                    metric_3.metric(
                         "Geçmiş yük",
-                        f"{float(row.get('historical_load', 0) or 0):.1f}",
+                        f"{float(selected_row.get('historical_load', 0) or 0):.1f}",
                     )
 
                     st.write(
-                        f"**Neden seçildi?** {selection_reason(row)}. "
-                        "Grup, minimum nöbet aralığı, mesafe ve geçmiş yük kuralları birlikte değerlendirildi."
+                        f"**Neden seçildi?** {selection_reason(selected_row)}. "
+                        "Grup uygunluğu, minimum nöbet aralığı, mesafe ve geçmiş görev yükü birlikte değerlendirildi."
                     )
 
         st.markdown("### 8 Günlük Grup Rotasyonu")
+
         rotation_rows = []
         for idx, combo in enumerate(KOMB_ABC, start=1):
             rotation_rows.append(
                 {
                     "Gün": idx,
                     "Grup Kombinasyonu": " • ".join(combo),
-                    "Durum": "Aktif" if idx == ((day_no - 1) % len(KOMB_ABC)) + 1 else "",
+                    "Durum": (
+                        "Aktif"
+                        if idx == ((day_no - 1) % len(KOMB_ABC)) + 1
+                        else ""
+                    ),
                 }
             )
 
@@ -1109,7 +1106,7 @@ with tab_plan:
             pd.DataFrame(rotation_rows),
             use_container_width=True,
             hide_index=True,
-            height=315,
+            height=300,
         )
 
 st.caption(
