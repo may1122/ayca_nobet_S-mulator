@@ -29,6 +29,8 @@ from algorithm import (
     build_group_svg,
 )
 
+DEMO_CITY_NAME = "Uşak"
+
 st.set_page_config(
     page_title="AYÇA Nöbet | Grup Simülasyonu",
     page_icon="💊",
@@ -221,7 +223,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.markdown('<div class="ayca-title">AYÇA Nöbet — Akıllı Grup Simülasyonu</div>', unsafe_allow_html=True)
+st.markdown('<div class="ayca-title">AYÇA Nöbet — Uşak Grup Simülasyonu</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="ayca-subtitle">Bugünün nöbet gruplarını, uygun eczaneleri ve oluşturulan planı canlı olarak inceleyin</div>',
     unsafe_allow_html=True,
