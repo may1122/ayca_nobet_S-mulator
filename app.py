@@ -500,10 +500,135 @@ def build_plan_cards(
     ).strip()
 
 
+def convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Return the convex hull of latitude/longitude points using monotonic chain."""
+    unique_points = sorted(set(points))
+
+    if len(unique_points) <= 1:
+        return unique_points
+
+    def cross(
+        origin: tuple[float, float],
+        point_a: tuple[float, float],
+        point_b: tuple[float, float],
+    ) -> float:
+        return (
+            (point_a[0] - origin[0]) * (point_b[1] - origin[1])
+            - (point_a[1] - origin[1]) * (point_b[0] - origin[0])
+        )
+
+    lower = []
+    for point in unique_points:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
+            lower.pop()
+        lower.append(point)
+
+    upper = []
+    for point in reversed(unique_points):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
+            upper.pop()
+        upper.append(point)
+
+    return lower[:-1] + upper[:-1]
+
+
+def add_group_boundaries(
+    fmap: folium.Map,
+    map_df: pd.DataFrame,
+    active_groups: list[str],
+) -> None:
+    boundary_colors = {
+        "A": "#2563EB",
+        "B": "#16A34A",
+        "C": "#EC4899",
+        "D": "#7C3AED",
+    }
+
+    for group_name in active_groups:
+        group_df = map_df.loc[map_df["group"] == group_name].copy()
+
+        if group_df.empty:
+            continue
+
+        color = boundary_colors.get(group_name[0], "#475467")
+        coordinates = [
+            (float(row.lat), float(row.lon))
+            for row in group_df.itertuples()
+        ]
+
+        center_lat = float(group_df["lat"].mean())
+        center_lon = float(group_df["lon"].mean())
+
+        if len(coordinates) >= 3:
+            # Convex hull works in lon/lat order, then convert back for Folium.
+            hull_input = [(lon, lat) for lat, lon in coordinates]
+            hull = convex_hull(hull_input)
+            hull_lat_lon = [(lat, lon) for lon, lat in hull]
+
+            folium.Polygon(
+                locations=hull_lat_lon,
+                color=color,
+                weight=3,
+                opacity=0.95,
+                dash_array="8, 8",
+                fill=True,
+                fill_color=color,
+                fill_opacity=0.06,
+                tooltip=f"{group_name} grubu sınırı",
+            ).add_to(fmap)
+
+        elif len(coordinates) == 2:
+            folium.PolyLine(
+                locations=coordinates,
+                color=color,
+                weight=3,
+                opacity=0.95,
+                dash_array="8, 8",
+                tooltip=f"{group_name} grubu sınırı",
+            ).add_to(fmap)
+
+        else:
+            folium.Circle(
+                location=coordinates[0],
+                radius=250,
+                color=color,
+                weight=3,
+                opacity=0.95,
+                dash_array="8, 8",
+                fill=True,
+                fill_color=color,
+                fill_opacity=0.06,
+                tooltip=f"{group_name} grubu sınırı",
+            ).add_to(fmap)
+
+        folium.Marker(
+            location=[center_lat, center_lon],
+            icon=folium.DivIcon(
+                html=f"""
+                <div style="
+                    transform: translate(-50%, -50%);
+                    background: {color};
+                    color: white;
+                    border: 2px solid white;
+                    border-radius: 999px;
+                    padding: 5px 9px;
+                    font-size: 12px;
+                    font-weight: 900;
+                    box-shadow: 0 3px 10px rgba(16,24,40,.25);
+                    white-space: nowrap;">
+                    {group_name}
+                </div>
+                """
+            ),
+            interactive=False,
+        ).add_to(fmap)
+
+
 def build_folium_map(
     map_df: pd.DataFrame,
     selected_df: pd.DataFrame,
     min_distance_km: float,
+    active_groups: list[str],
 ) -> folium.Map:
     center = [float(map_df["lat"].mean()), float(map_df["lon"].mean())]
     fmap = folium.Map(
@@ -511,6 +636,13 @@ def build_folium_map(
         zoom_start=12,
         tiles="CartoDB positron",
         control_scale=True,
+    )
+
+    # Aktif grupların kesik çizgili sınırlarını haritaya ekle.
+    add_group_boundaries(
+        fmap=fmap,
+        map_df=map_df,
+        active_groups=active_groups,
     )
 
     # Seçilen eczanelerin minimum mesafe çemberleri.
@@ -794,6 +926,7 @@ with tab_map:
           <span><i class="dot" style="background:#DC2626"></i> Yakınlık engeli</span>
           <span><i class="dot" style="background:#F59E0B"></i> Nöbet aralığı engeli</span>
           <span><i class="dot" style="background:#7C3AED"></i> Grup dışı / pasif</span>
+          <span style="border-bottom:3px dashed #2563EB;padding-bottom:2px;">Grup sınırı</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -868,6 +1001,7 @@ with tab_map:
             map_df=base_map_df,
             selected_df=selected_df,
             min_distance_km=min_distance_km,
+            active_groups=active_groups,
         )
 
         map_event = st_folium(
