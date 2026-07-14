@@ -229,6 +229,19 @@ def build_group_svg(
         f'stroke-width="5" opacity="0.95" stroke-linejoin="round"/>'
     )
 
+    live_lines = []
+    for idx, group in enumerate(active_combo):
+        next_group = active_combo[(idx + 1) % len(active_combo)]
+        x1, y1 = subgroup_positions[group]
+        x2, y2 = subgroup_positions[next_group]
+        both_selected = group in selected_by_group and next_group in selected_by_group
+        live_lines.append(
+            f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
+            f'stroke="{"#16A34A" if both_selected else "#60A5FA"}" '
+            f'stroke-width="{"8" if both_selected else "4"}" '
+            f'stroke-dasharray="{"0" if both_selected else "10 8"}" opacity="0.95"/>'
+        )
+
     region_shapes = []
     subgroup_shapes = []
 
@@ -254,6 +267,11 @@ def build_group_svg(
             f'<circle cx="{gx}" cy="{gy}" r="{subgroup_r}" fill="{fill}" '
             f'stroke="{region_color}" stroke-width="{stroke_width}"/>'
         )
+        if group in selected_by_group:
+            subgroup_shapes.append(
+                f'<circle cx="{gx}" cy="{gy}" r="{subgroup_r + 8}" fill="none" '
+                f'stroke="#16A34A" stroke-width="5"/>'
+            )
         subgroup_shapes.append(
             f'<text x="{gx}" y="{gy+6}" text-anchor="middle" '
             f'font-size="18" font-weight="800" fill="{text_color}">{group}</text>'
@@ -296,6 +314,7 @@ def build_group_svg(
         {''.join(region_shapes)}
         {''.join(all_combo_lines)}
         {active_line}
+        {''.join(live_lines)}
         {''.join(subgroup_shapes)}
         {legend}
       </svg>
