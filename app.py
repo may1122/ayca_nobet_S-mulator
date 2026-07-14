@@ -594,10 +594,65 @@ if "selection_source_by_group" not in st.session_state:
 state: SimulationState = st.session_state.state
 
 with st.sidebar:
-    st.header("Simülasyon Ayarları")
-    start_date = st.date_input("Başlangıç tarihi", value=date(2026, 8, 1))
-    day_no = st.slider("Gün", min_value=1, max_value=31, value=1)
-    current_date = start_date + timedelta(days=day_no - 1)
+    st.header("Takvim ve Plan Ayarları")
+
+    rotation_start_date = date(2026, 8, 1)
+
+    if "selected_calendar_date" not in st.session_state:
+        st.session_state.selected_calendar_date = rotation_start_date
+
+    selected_calendar_date = st.date_input(
+        "Nöbet gününü takvimden seçin",
+        value=st.session_state.selected_calendar_date,
+        min_value=rotation_start_date,
+        max_value=rotation_start_date + timedelta(days=365),
+        format="DD.MM.YYYY",
+        key="calendar_date_picker",
+    )
+
+    if selected_calendar_date != st.session_state.selected_calendar_date:
+        st.session_state.selected_calendar_date = selected_calendar_date
+        st.session_state.selected_by_group = {}
+        st.session_state.selection_source_by_group = {}
+
+    current_date = selected_calendar_date
+    start_date = rotation_start_date
+    day_no = (current_date - rotation_start_date).days + 1
+
+    nav_prev, nav_today, nav_next = st.columns(3)
+
+    with nav_prev:
+        if st.button("←", help="Önceki gün", use_container_width=True):
+            new_date = max(
+                rotation_start_date,
+                current_date - timedelta(days=1),
+            )
+            st.session_state.selected_calendar_date = new_date
+            st.session_state.selected_by_group = {}
+            st.session_state.selection_source_by_group = {}
+            st.rerun()
+
+    with nav_today:
+        if st.button("Bugün", use_container_width=True):
+            today_value = date.today()
+            if today_value < rotation_start_date:
+                today_value = rotation_start_date
+            st.session_state.selected_calendar_date = today_value
+            st.session_state.selected_by_group = {}
+            st.session_state.selection_source_by_group = {}
+            st.rerun()
+
+    with nav_next:
+        if st.button("→", help="Sonraki gün", use_container_width=True):
+            st.session_state.selected_calendar_date = current_date + timedelta(days=1)
+            st.session_state.selected_by_group = {}
+            st.session_state.selection_source_by_group = {}
+            st.rerun()
+
+    st.caption(
+        f"Seçilen gün: {current_date.strftime('%d.%m.%Y')} · "
+        f"Rotasyon günü: {((day_no - 1) % 8) + 1}"
+    )
 
     min_distance_km = st.slider(
         "Minimum eczaneler arası mesafe",
@@ -622,7 +677,7 @@ with st.sidebar:
         st.rerun()
 
     if st.button("Günü Otomatik Tamamla", type="primary", use_container_width=True):
-        active_groups = group_for_day(day_no - 1)
+        active_groups = group_for_day((day_no - 1) % len(KOMB_ABC))
         chosen = {}
         temp_state = state.copy()
 
@@ -653,7 +708,7 @@ with st.sidebar:
         }
         st.rerun()
 
-active_groups = group_for_day(day_no - 1)
+active_groups = group_for_day((day_no - 1) % len(KOMB_ABC))
 combination_text = " + ".join(active_groups)
 selected_ids = list(st.session_state.selected_by_group.values())
 
@@ -982,7 +1037,7 @@ with tab_groups:
     selected_rotation = st.selectbox(
         "Eşlenik kombinasyonu",
         options=list(range(1, 9)),
-        index=((day_no - 1) % 8),
+        index=((day_no - 1) % len(KOMB_ABC)),
         format_func=lambda x: f"Gün {x}: {' • '.join(KOMB_ABC[x-1])}",
     )
 
@@ -1065,10 +1120,10 @@ with tab_plan:
         temp_state = state.copy()
 
         for day_idx in range(days_to_show):
-            sim_date = start_date + timedelta(days=day_idx)
+            sim_date = current_date + timedelta(days=day_idx)
             selected_for_day = []
 
-            for group_name in group_for_day(day_idx):
+            for group_name in group_for_day(((day_no - 1) + day_idx) % len(KOMB_ABC)):
                 result = eligible_candidates(
                     pharmacies=pharmacies,
                     group_name=group_name,
