@@ -224,6 +224,23 @@ def build_decision_engine_card(row: pd.Series, min_gap_days: int, min_distance_k
 
     return dedent(
         f"""
+        <!DOCTYPE html>
+        <html lang="tr">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            * {{ box-sizing: border-box; }}
+            body {{
+              margin: 0;
+              padding: 2px;
+              background: transparent;
+              font-family: Arial, Helvetica, sans-serif;
+              color: #101828;
+            }}
+          </style>
+        </head>
+        <body>
         <div style="border:1px solid #D0D5DD;border-radius:18px;padding:18px;background:#FFFFFF;
                     box-shadow:0 8px 22px rgba(16,24,40,.06);">
       <div style="font-size:19px;font-weight:900;color:#123B6D;margin-bottom:4px;">
@@ -246,6 +263,8 @@ def build_decision_engine_card(row: pd.Series, min_gap_days: int, min_distance_k
         </div>
       </div>
         </div>
+        </body>
+        </html>
         """
     ).strip()
 
@@ -674,23 +693,25 @@ with tab_map:
                     base_map_df["pharmacy_id"] == current_pid
                 ].iloc[0]
                 st.success(f'{row["pharmacy_name"]} seçildi.')
-                st.markdown(
+                components.html(
                     build_decision_engine_card(
                         row=row,
                         min_gap_days=min_gap_days,
                         min_distance_km=min_distance_km,
                     ),
-                    unsafe_allow_html=True,
+                    height=520,
+                    scrolling=False,
                 )
             elif not selectable.empty:
                 preview_row = selectable.iloc[0]
-                st.markdown(
+                components.html(
                     build_decision_engine_card(
                         row=preview_row,
                         min_gap_days=min_gap_days,
                         min_distance_km=min_distance_km,
                     ),
-                    unsafe_allow_html=True,
+                    height=520,
+                    scrolling=False,
                 )
 
             with st.expander(f"{group_name} elenme gerekçeleri"):
