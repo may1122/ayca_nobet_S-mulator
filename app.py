@@ -488,7 +488,7 @@ with tab_groups:
     )
 
     st.markdown(
-        '<div class="small-note">Kalın mavi çizgiler seçilen günün aktif eşleniklerini gösterir. Haritadan eczane seçildikçe ilgili grup düğümü ve seçilen eczane etiketi canlı güncellenir.</div>',
+        '<div class="small-note">Gruplar iç içe halkalar halinde gösterilir. Her çeyrek A, B, C ve D bölgelerini; içten dışa halkalar ise 1, 2, 3 ve 4 alt gruplarını temsil eder. Haritadan eczane seçildikçe ilgili sektör yeşil çerçeveyle canlı güncellenir.</div>',
         unsafe_allow_html=True,
     )
 
