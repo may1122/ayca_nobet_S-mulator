@@ -2,3 +2,5 @@ streamlit>=1.38
 pandas>=2.0
 numpy>=1.26
 pydeck>=0.9
+folium>=0.17
+streamlit-folium>=0.22
