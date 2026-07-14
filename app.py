@@ -857,6 +857,12 @@ def generate_multi_day_plan(
     return pd.DataFrame(schedule_rows), assignments_by_date
 
 
+# ==========================================================
+# SESSION STATE VE PLANLAMA KONTROLLERİ
+# ==========================================================
+
+ROTATION_START_DATE = date(2026, 8, 1)
+
 if "state" not in st.session_state:
     st.session_state.state = SimulationState.from_dataframe(pharmacies)
 
@@ -866,12 +872,68 @@ if "selected_by_group" not in st.session_state:
 if "selection_source_by_group" not in st.session_state:
     st.session_state.selection_source_by_group = {}
 
+if "manual_selected_date" not in st.session_state:
+    st.session_state.manual_selected_date = ROTATION_START_DATE
+
+if "manual_date_widget" not in st.session_state:
+    st.session_state.manual_date_widget = st.session_state.manual_selected_date
+
+if "auto_plan_ready" not in st.session_state:
+    st.session_state.auto_plan_ready = False
+
+if "auto_schedule_df" not in st.session_state:
+    st.session_state.auto_schedule_df = pd.DataFrame()
+
+if "auto_assignments_by_date" not in st.session_state:
+    st.session_state.auto_assignments_by_date = {}
+
+if "auto_generated_start_date" not in st.session_state:
+    st.session_state.auto_generated_start_date = ROTATION_START_DATE
+
+if "auto_generated_days_count" not in st.session_state:
+    st.session_state.auto_generated_days_count = 10
+
+if "auto_view_date" not in st.session_state:
+    st.session_state.auto_view_date = ROTATION_START_DATE
+
 state: SimulationState = st.session_state.state
+
+
+def clear_current_selections() -> None:
+    st.session_state.selected_by_group = {}
+    st.session_state.selection_source_by_group = {}
+
+
+def sync_manual_date_from_widget() -> None:
+    st.session_state.manual_selected_date = st.session_state.manual_date_widget
+    clear_current_selections()
+
+
+def set_manual_date(target_date: date) -> None:
+    safe_date = max(ROTATION_START_DATE, target_date)
+    st.session_state.manual_selected_date = safe_date
+    st.session_state.manual_date_widget = safe_date
+    clear_current_selections()
+
+
+def go_previous_manual_day() -> None:
+    set_manual_date(
+        st.session_state.manual_selected_date - timedelta(days=1)
+    )
+
+
+def go_next_manual_day() -> None:
+    set_manual_date(
+        st.session_state.manual_selected_date + timedelta(days=1)
+    )
+
+
+def go_today_manual() -> None:
+    set_manual_date(max(ROTATION_START_DATE, date.today()))
+
 
 with st.sidebar:
     st.header("Takvim ve Plan Ayarları")
-
-    rotation_start_date = date(2026, 8, 1)
 
     planning_mode = st.radio(
         "Çalışma modu",
@@ -879,100 +941,78 @@ with st.sidebar:
         key="planning_mode",
     )
 
-    if "calendar_date_picker" not in st.session_state:
-        st.session_state.calendar_date_picker = rotation_start_date
-
-    if "auto_plan_start_date" not in st.session_state:
-        st.session_state.auto_plan_start_date = rotation_start_date
-
-    if "auto_plan_days" not in st.session_state:
-        st.session_state.auto_plan_days = 10
-
     if planning_mode == "Tek Gün / Manuel Seçim":
-        selected_calendar_date = st.date_input(
+        st.date_input(
             "Nöbet gününü takvimden seçin",
-            min_value=rotation_start_date,
-            max_value=rotation_start_date + timedelta(days=365),
+            min_value=ROTATION_START_DATE,
+            max_value=ROTATION_START_DATE + timedelta(days=365),
             format="DD.MM.YYYY",
-            key="calendar_date_picker",
+            key="manual_date_widget",
+            on_change=sync_manual_date_from_widget,
         )
 
-        current_date = selected_calendar_date
-        start_date = rotation_start_date
-        day_no = (current_date - rotation_start_date).days + 1
+        current_date = st.session_state.manual_selected_date
+        start_date = ROTATION_START_DATE
+        day_no = (current_date - ROTATION_START_DATE).days + 1
 
         nav_prev, nav_today, nav_next = st.columns(3)
 
         with nav_prev:
-            if st.button(
+            st.button(
                 "←",
                 help="Önceki gün",
                 use_container_width=True,
                 key="manual_previous_day",
-            ):
-                st.session_state.calendar_date_picker = max(
-                    rotation_start_date,
-                    current_date - timedelta(days=1),
-                )
-                st.session_state.selected_by_group = {}
-                st.session_state.selection_source_by_group = {}
-                st.rerun()
+                on_click=go_previous_manual_day,
+            )
 
         with nav_today:
-            if st.button(
+            st.button(
                 "Bugün",
                 use_container_width=True,
                 key="manual_today",
-            ):
-                today_value = max(rotation_start_date, date.today())
-                st.session_state.calendar_date_picker = today_value
-                st.session_state.selected_by_group = {}
-                st.session_state.selection_source_by_group = {}
-                st.rerun()
+                on_click=go_today_manual,
+            )
 
         with nav_next:
-            if st.button(
+            st.button(
                 "→",
                 help="Sonraki gün",
                 use_container_width=True,
                 key="manual_next_day",
-            ):
-                st.session_state.calendar_date_picker = (
-                    current_date + timedelta(days=1)
-                )
-                st.session_state.selected_by_group = {}
-                st.session_state.selection_source_by_group = {}
-                st.rerun()
+                on_click=go_next_manual_day,
+            )
 
         st.caption(
             f"Seçilen gün: {current_date.strftime('%d.%m.%Y')} · "
-            f"Rotasyon günü: {((day_no - 1) % 8) + 1}"
+            f"Rotasyon günü: {((day_no - 1) % len(KOMB_ABC)) + 1}"
         )
 
     else:
         auto_start_date = st.date_input(
             "Plan başlangıç tarihi",
-            min_value=rotation_start_date,
-            max_value=rotation_start_date + timedelta(days=365),
+            value=st.session_state.auto_generated_start_date,
+            min_value=ROTATION_START_DATE,
+            max_value=ROTATION_START_DATE + timedelta(days=365),
             format="DD.MM.YYYY",
-            key="auto_plan_start_date",
+            key="auto_plan_start_widget",
         )
 
         auto_days_count = st.slider(
             "Otomatik oluşturulacak gün sayısı",
             min_value=3,
             max_value=31,
-            value=int(st.session_state.auto_plan_days),
-            key="auto_plan_days",
+            value=int(st.session_state.auto_generated_days_count),
+            key="auto_plan_days_widget",
         )
 
         current_date = auto_start_date
-        start_date = rotation_start_date
-        day_no = (current_date - rotation_start_date).days + 1
+        start_date = ROTATION_START_DATE
+        day_no = (current_date - ROTATION_START_DATE).days + 1
 
         st.caption(
             f"{auto_start_date.strftime('%d.%m.%Y')} tarihinden başlayarak "
-            f"{auto_days_count} günlük otomatik plan oluşturulacak."
+            f"{auto_days_count} günlük plan oluşturulur."
         )
 
     min_distance_km = st.slider(
@@ -981,6 +1021,7 @@ with st.sidebar:
         max_value=3.0,
         value=1.0,
         step=0.1,
+        key="minimum_distance_slider",
     )
 
     min_gap_days = st.slider(
@@ -989,20 +1030,25 @@ with st.sidebar:
         max_value=30,
         value=14,
         step=1,
+        key="minimum_gap_slider",
     )
 
     st.divider()
 
     if planning_mode == "Tek Gün / Manuel Seçim":
-        if st.button("Seçimleri Temizle", use_container_width=True):
-            st.session_state.selected_by_group = {}
-            st.session_state.selection_source_by_group = {}
+        if st.button(
+            "Seçimleri Temizle",
+            use_container_width=True,
+            key="clear_manual_selections",
+        ):
+            clear_current_selections()
             st.rerun()
 
         if st.button(
             "Günü Otomatik Tamamla",
             type="primary",
             use_container_width=True,
+            key="complete_single_day",
         ):
             active_groups_for_auto = group_for_day(
                 (day_no - 1) % len(KOMB_ABC)
@@ -1024,6 +1070,7 @@ with st.sidebar:
                 valid = result[result["selectable"]].sort_values(
                     ["decision_score", "distance_to_nearest_selected_km"],
                     ascending=[False, False],
+                    na_position="last",
                 )
 
                 if not valid.empty:
@@ -1038,54 +1085,140 @@ with st.sidebar:
             }
             st.rerun()
 
+    else:
+        if st.button(
+            "Çok Günlük Planı Oluştur",
+            type="primary",
+            use_container_width=True,
+            key="generate_multi_day_plan_button",
+        ):
+            generated_df, generated_assignments = generate_multi_day_plan(
+                pharmacies=pharmacies,
+                state=state,
+                start_date=auto_start_date,
+                days_count=int(auto_days_count),
+                min_distance_km=min_distance_km,
+                min_gap_days=min_gap_days,
+                rotation_start_date=ROTATION_START_DATE,
+            )
 
-active_groups = group_for_day((day_no - 1) % len(KOMB_ABC))
+            st.session_state.auto_schedule_df = generated_df
+            st.session_state.auto_assignments_by_date = generated_assignments
+            st.session_state.auto_generated_start_date = auto_start_date
+            st.session_state.auto_generated_days_count = int(auto_days_count)
+            st.session_state.auto_view_date = auto_start_date
+            st.session_state.auto_plan_ready = True
+            clear_current_selections()
+            st.rerun()
+
+
+# ==========================================================
+# AKTİF GÜN VE OTOMATİK PLAN GÖRÜNÜMÜ
+# ==========================================================
 
 auto_schedule_df = pd.DataFrame()
 auto_assignments_by_date: dict[str, dict[str, int]] = {}
 
 if planning_mode == "Otomatik Çok Günlük Plan":
-    auto_schedule_df, auto_assignments_by_date = generate_multi_day_plan(
-        pharmacies=pharmacies,
-        state=state,
-        start_date=auto_start_date,
-        days_count=auto_days_count,
-        min_distance_km=min_distance_km,
-        min_gap_days=min_gap_days,
-        rotation_start_date=rotation_start_date,
+    if st.session_state.auto_plan_ready:
+        auto_schedule_df = st.session_state.auto_schedule_df
+        auto_assignments_by_date = (
+            st.session_state.auto_assignments_by_date
+        )
+
+        generated_start = st.session_state.auto_generated_start_date
+        generated_days = int(st.session_state.auto_generated_days_count)
+
+        available_auto_dates = [
+            generated_start + timedelta(days=offset)
+            for offset in range(generated_days)
+        ]
+
+        if st.session_state.auto_view_date not in available_auto_dates:
+            st.session_state.auto_view_date = generated_start
+
+        auto_date_index = available_auto_dates.index(
+            st.session_state.auto_view_date
+        )
+
+        auto_prev_col, auto_date_col, auto_next_col = st.columns(
+            [1, 3, 1]
+        )
+
+        with auto_prev_col:
+            if st.button(
+                "← Önceki",
+                key="auto_previous_date_button",
+                use_container_width=True,
+                disabled=auto_date_index == 0,
+            ):
+                st.session_state.auto_view_date = available_auto_dates[
+                    auto_date_index - 1
+                ]
+                st.rerun()
+
+        with auto_date_col:
+            selected_auto_date = st.selectbox(
+                "Haritada gösterilecek otomatik plan günü",
+                options=available_auto_dates,
+                index=auto_date_index,
+                format_func=lambda value: value.strftime("%d.%m.%Y"),
+                key="auto_view_date_selector",
+            )
+
+            if selected_auto_date != st.session_state.auto_view_date:
+                st.session_state.auto_view_date = selected_auto_date
+                st.rerun()
+
+        with auto_next_col:
+            if st.button(
+                "Sonraki →",
+                key="auto_next_date_button",
+                use_container_width=True,
+                disabled=auto_date_index >= len(available_auto_dates) - 1,
+            ):
+                st.session_state.auto_view_date = available_auto_dates[
+                    auto_date_index + 1
+                ]
+                st.rerun()
+
+        current_date = st.session_state.auto_view_date
+        day_no = (current_date - ROTATION_START_DATE).days + 1
+        active_groups = group_for_day(
+            (day_no - 1) % len(KOMB_ABC)
+        )
+
+        selected_by_group_for_map = auto_assignments_by_date.get(
+            current_date.isoformat(),
+            {},
+        )
+
+        st.session_state.selected_by_group = dict(
+            selected_by_group_for_map
+        )
+        st.session_state.selection_source_by_group = {
+            group_name: "AYÇA çok günlük otomatik plan"
+            for group_name in selected_by_group_for_map
+        }
+
+    else:
+        current_date = auto_start_date
+        day_no = (current_date - ROTATION_START_DATE).days + 1
+        active_groups = group_for_day(
+            (day_no - 1) % len(KOMB_ABC)
+        )
+        clear_current_selections()
+        st.info(
+            "Otomatik planı görmek için sol menüden "
+            "'Çok Günlük Planı Oluştur' butonuna basın."
+        )
+
+else:
+    current_date = st.session_state.manual_selected_date
+    day_no = (current_date - ROTATION_START_DATE).days + 1
+    active_groups = group_for_day(
+        (day_no - 1) % len(KOMB_ABC)
     )
-
-    available_auto_dates = [
-        auto_start_date + timedelta(days=offset)
-        for offset in range(auto_days_count)
-    ]
-
-    if "auto_map_date" not in st.session_state:
-        st.session_state.auto_map_date = auto_start_date
-
-    if st.session_state.auto_map_date not in available_auto_dates:
-        st.session_state.auto_map_date = auto_start_date
-
-    auto_map_date = st.selectbox(
-        "Haritada gösterilecek otomatik plan günü",
-        options=available_auto_dates,
-        format_func=lambda value: value.strftime("%d.%m.%Y"),
-        key="auto_map_date",
-    )
-
-    current_date = auto_map_date
-    day_no = (current_date - rotation_start_date).days + 1
-    active_groups = group_for_day((day_no - 1) % len(KOMB_ABC))
-
-    selected_by_group_for_map = auto_assignments_by_date.get(
-        current_date.isoformat(),
-        {},
-    )
-    st.session_state.selected_by_group = selected_by_group_for_map
-    st.session_state.selection_source_by_group = {
-        group_name: "AYÇA çok günlük otomatik plan"
-        for group_name in selected_by_group_for_map
-    }
 
 combination_text = " + ".join(active_groups)
 selected_ids = list(st.session_state.selected_by_group.values())
@@ -1351,6 +1484,9 @@ with tab_map:
             current_pid = st.session_state.selected_by_group.get(group_name)
 
             option_ids = [None] + selectable["pharmacy_id"].astype(int).tolist()
+            if current_pid is not None and current_pid not in option_ids:
+                option_ids.insert(1, int(current_pid))
+
             labels = {None: "— Eczane seç —"}
             labels.update(
                 {
@@ -1360,6 +1496,17 @@ with tab_map:
                     for _, r in selectable.iterrows()
                 }
             )
+
+            if current_pid is not None and current_pid not in labels:
+                current_match = pharmacies.loc[
+                    pharmacies["pharmacy_id"] == int(current_pid)
+                ]
+                current_name = (
+                    current_match.iloc[0]["pharmacy_name"]
+                    if not current_match.empty
+                    else f"Eczane {current_pid}"
+                )
+                labels[int(current_pid)] = f"{current_name} | seçilmiş"
 
             default_index = option_ids.index(current_pid) if current_pid in option_ids else 0
 
@@ -1372,14 +1519,15 @@ with tab_map:
                 disabled=planning_mode == "Otomatik Çok Günlük Plan",
             )
 
-            if chosen is not None and chosen != current_pid:
-                st.session_state.selected_by_group[group_name] = int(chosen)
-                st.session_state.selection_source_by_group[group_name] = "Listeden manuel seçim"
-                st.rerun()
-            elif chosen is None and current_pid is not None:
-                st.session_state.selected_by_group.pop(group_name, None)
-                st.session_state.selection_source_by_group.pop(group_name, None)
-                st.rerun()
+            if planning_mode == "Tek Gün / Manuel Seçim":
+                if chosen is not None and chosen != current_pid:
+                    st.session_state.selected_by_group[group_name] = int(chosen)
+                    st.session_state.selection_source_by_group[group_name] = "Listeden manuel seçim"
+                    st.rerun()
+                elif chosen is None and current_pid is not None:
+                    st.session_state.selected_by_group.pop(group_name, None)
+                    st.session_state.selection_source_by_group.pop(group_name, None)
+                    st.rerun()
 
             if current_pid is not None:
                 row = base_map_df.loc[
@@ -1502,16 +1650,22 @@ with tab_plan:
         st.markdown("### İleri Tarih Planı")
 
         if planning_mode == "Otomatik Çok Günlük Plan":
-            display_auto_df = auto_schedule_df.drop(
-                columns=["Eczane ID"],
-                errors="ignore",
-            )
-            st.dataframe(
-                display_auto_df,
-                use_container_width=True,
-                hide_index=True,
-                height=510,
-            )
+            if not st.session_state.auto_plan_ready:
+                st.info(
+                    "Sol menüden başlangıç tarihini ve gün sayısını seçip "
+                    "'Çok Günlük Planı Oluştur' butonuna basın."
+                )
+            else:
+                display_auto_df = auto_schedule_df.drop(
+                    columns=["Eczane ID"],
+                    errors="ignore",
+                )
+                st.dataframe(
+                    display_auto_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=510,
+                )
         else:
             days_to_show = st.slider(
                 "Gösterilecek gün sayısı",
