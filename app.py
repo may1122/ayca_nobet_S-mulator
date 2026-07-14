@@ -544,13 +544,31 @@ def add_group_boundaries(
         "D": "#7C3AED",
     }
 
-    for group_name in active_groups:
+    all_groups = sorted(
+        map_df["group"].dropna().astype(str).unique().tolist()
+    )
+    active_group_set = set(active_groups)
+
+    # Önce pasif grupları çiziyoruz; aktif gruplar üstte ve daha belirgin kalır.
+    ordered_groups = [
+        group_name
+        for group_name in all_groups
+        if group_name not in active_group_set
+    ] + [
+        group_name
+        for group_name in all_groups
+        if group_name in active_group_set
+    ]
+
+    for group_name in ordered_groups:
         group_df = map_df.loc[map_df["group"] == group_name].copy()
 
         if group_df.empty:
             continue
 
+        is_active = group_name in active_group_set
         color = boundary_colors.get(group_name[0], "#475467")
+
         coordinates = [
             (float(row.lat), float(row.lon))
             for row in group_df.itertuples()
@@ -559,8 +577,17 @@ def add_group_boundaries(
         center_lat = float(group_df["lat"].mean())
         center_lon = float(group_df["lon"].mean())
 
+        line_weight = 3 if is_active else 1.25
+        line_opacity = 0.95 if is_active else 0.22
+        fill_opacity = 0.07 if is_active else 0.012
+        dash_pattern = "8, 8" if is_active else "4, 9"
+        tooltip_text = (
+            f"{group_name} grubu · Bugün aktif"
+            if is_active
+            else f"{group_name} grubu · Bugün pasif"
+        )
+
         if len(coordinates) >= 3:
-            # Convex hull works in lon/lat order, then convert back for Folium.
             hull_input = [(lon, lat) for lat, lon in coordinates]
             hull = convex_hull(hull_input)
             hull_lat_lon = [(lat, lon) for lon, lat in hull]
@@ -568,23 +595,23 @@ def add_group_boundaries(
             folium.Polygon(
                 locations=hull_lat_lon,
                 color=color,
-                weight=3,
-                opacity=0.95,
-                dash_array="8, 8",
+                weight=line_weight,
+                opacity=line_opacity,
+                dash_array=dash_pattern,
                 fill=True,
                 fill_color=color,
-                fill_opacity=0.06,
-                tooltip=f"{group_name} grubu sınırı",
+                fill_opacity=fill_opacity,
+                tooltip=tooltip_text,
             ).add_to(fmap)
 
         elif len(coordinates) == 2:
             folium.PolyLine(
                 locations=coordinates,
                 color=color,
-                weight=3,
-                opacity=0.95,
-                dash_array="8, 8",
-                tooltip=f"{group_name} grubu sınırı",
+                weight=line_weight,
+                opacity=line_opacity,
+                dash_array=dash_pattern,
+                tooltip=tooltip_text,
             ).add_to(fmap)
 
         else:
@@ -592,34 +619,51 @@ def add_group_boundaries(
                 location=coordinates[0],
                 radius=250,
                 color=color,
-                weight=3,
-                opacity=0.95,
-                dash_array="8, 8",
+                weight=line_weight,
+                opacity=line_opacity,
+                dash_array=dash_pattern,
                 fill=True,
                 fill_color=color,
-                fill_opacity=0.06,
-                tooltip=f"{group_name} grubu sınırı",
+                fill_opacity=fill_opacity,
+                tooltip=tooltip_text,
             ).add_to(fmap)
+
+        if is_active:
+            label_html = f"""
+            <div style="
+                transform: translate(-50%, -50%);
+                background: {color};
+                color: white;
+                border: 2px solid white;
+                border-radius: 999px;
+                padding: 5px 9px;
+                font-size: 12px;
+                font-weight: 900;
+                box-shadow: 0 3px 10px rgba(16,24,40,.25);
+                white-space: nowrap;">
+                {group_name}
+            </div>
+            """
+        else:
+            label_html = f"""
+            <div style="
+                transform: translate(-50%, -50%);
+                color: {color};
+                background: rgba(255,255,255,.72);
+                border: 1px dashed {color};
+                border-radius: 999px;
+                padding: 2px 6px;
+                font-size: 9px;
+                font-weight: 700;
+                opacity: .34;
+                white-space: nowrap;">
+                {group_name}
+            </div>
+            """
 
         folium.Marker(
             location=[center_lat, center_lon],
-            icon=folium.DivIcon(
-                html=f"""
-                <div style="
-                    transform: translate(-50%, -50%);
-                    background: {color};
-                    color: white;
-                    border: 2px solid white;
-                    border-radius: 999px;
-                    padding: 5px 9px;
-                    font-size: 12px;
-                    font-weight: 900;
-                    box-shadow: 0 3px 10px rgba(16,24,40,.25);
-                    white-space: nowrap;">
-                    {group_name}
-                </div>
-                """
-            ),
+            icon=folium.DivIcon(html=label_html),
             interactive=False,
         ).add_to(fmap)
 
@@ -926,7 +970,8 @@ with tab_map:
           <span><i class="dot" style="background:#DC2626"></i> Yakınlık engeli</span>
           <span><i class="dot" style="background:#F59E0B"></i> Nöbet aralığı engeli</span>
           <span><i class="dot" style="background:#7C3AED"></i> Grup dışı / pasif</span>
-          <span style="border-bottom:3px dashed #2563EB;padding-bottom:2px;">Grup sınırı</span>
+          <span style="border-bottom:3px dashed #2563EB;padding-bottom:2px;">Aktif grup sınırı</span>
+          <span style="border-bottom:1px dashed rgba(71,84,103,.35);padding-bottom:2px;color:#98A2B3;">Pasif grup sınırı</span>
         </div>
         """,
         unsafe_allow_html=True,
