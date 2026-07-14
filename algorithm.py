@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -191,132 +192,283 @@ def build_group_svg(
     active_combo: tuple[str, str, str, str],
     selected_by_group: dict[str, int],
 ) -> str:
-    width, height = 1100, 720
-    cx, cy = width / 2, height / 2 + 10
-    main_r = 250
-    subgroup_r = 46
+    """
+    Grupları iç içe halkalar halinde gösterir.
 
-    # main region centers
-    region_positions = {
-        "A": (cx, cy - 225),
-        "B": (cx + 285, cy),
-        "C": (cx, cy + 225),
-        "D": (cx - 285, cy),
+    Mantık:
+    - Her ana bölge bir çeyrek daireyi temsil eder:
+      A = sol üst, B = sol alt, C = sağ alt, D = sağ üst
+    - Alt grup numarası halkanın seviyesidir:
+      1 = merkezdeki halka, 4 = en dış halka
+    - Aktif kombinasyondaki sektörler bölge renginde vurgulanır.
+    - Haritadan eczane seçildikçe ilgili sektör yeşil çerçeve alır.
+    """
+    width, height = 1180, 820
+    cx, cy = 590, 420
+
+    region_colors = {
+        "A": "#0EA5E9",
+        "B": "#22C55E",
+        "C": "#F9A8D4",
+        "D": "#A855F7",
     }
 
-    subgroup_positions = {}
-    for region, (rx, ry) in region_positions.items():
-        angle_start = {"A": 200, "B": 110, "C": 20, "D": -70}[region]
-        for idx in range(1, 5):
-            angle = math.radians(angle_start + (idx - 1) * 38)
-            subgroup_positions[f"{region}{idx}"] = (
-                rx + math.cos(angle) * 115,
-                ry + math.sin(angle) * 115,
-            )
-
-    all_combo_lines = []
-    for combo in KOMB_ABC:
-        pts = [subgroup_positions[g] for g in combo]
-        path = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts + [pts[0]])
-        all_combo_lines.append(
-            f'<polyline points="{path}" fill="none" stroke="#CBD5E1" stroke-width="1.4" opacity="0.45"/>'
+    # SVG yay dilimi oluşturucu.
+    def polar(center_x: float, center_y: float, radius: float, angle_deg: float):
+        angle = math.radians(angle_deg)
+        return (
+            center_x + radius * math.cos(angle),
+            center_y + radius * math.sin(angle),
         )
 
-    active_pts = [subgroup_positions[g] for g in active_combo]
-    active_path = " ".join(f"{x:.1f},{y:.1f}" for x, y in active_pts + [active_pts[0]])
-    active_line = (
-        f'<polyline points="{active_path}" fill="none" stroke="#123B6D" '
-        f'stroke-width="5" opacity="0.95" stroke-linejoin="round"/>'
+    def annular_sector_path(
+        center_x: float,
+        center_y: float,
+        inner_r: float,
+        outer_r: float,
+        start_angle: float,
+        end_angle: float,
+    ) -> str:
+        x1, y1 = polar(center_x, center_y, outer_r, start_angle)
+        x2, y2 = polar(center_x, center_y, outer_r, end_angle)
+        x3, y3 = polar(center_x, center_y, inner_r, end_angle)
+        x4, y4 = polar(center_x, center_y, inner_r, start_angle)
+
+        large_arc = 1 if (end_angle - start_angle) > 180 else 0
+
+        return (
+            f"M {x1:.2f},{y1:.2f} "
+            f"A {outer_r},{outer_r} 0 {large_arc} 1 {x2:.2f},{y2:.2f} "
+            f"L {x3:.2f},{y3:.2f} "
+            f"A {inner_r},{inner_r} 0 {large_arc} 0 {x4:.2f},{y4:.2f} Z"
+        )
+
+    # Saat yönünde:
+    # A sol üst, B sol alt, C sağ alt, D sağ üst
+    region_angles = {
+        "A": (180, 270),
+        "B": (90, 180),
+        "C": (0, 90),
+        "D": (270, 360),
+    }
+
+    inner_start = 58
+    ring_width = 58
+    ring_gap = 0
+
+    active_set = set(active_combo)
+
+    background = []
+    active_shapes = []
+    labels = []
+    selected_overlays = []
+
+    # Merkez daire.
+    background.append(
+        f'<circle cx="{cx}" cy="{cy}" r="{inner_start}" fill="#FFFFFF" '
+        f'stroke="#111827" stroke-width="3"/>'
     )
 
-    live_lines = []
-    for idx, group in enumerate(active_combo):
-        next_group = active_combo[(idx + 1) % len(active_combo)]
-        x1, y1 = subgroup_positions[group]
-        x2, y2 = subgroup_positions[next_group]
-        both_selected = group in selected_by_group and next_group in selected_by_group
-        live_lines.append(
-            f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
-            f'stroke="{"#16A34A" if both_selected else "#60A5FA"}" '
-            f'stroke-width="{"8" if both_selected else "4"}" '
-            f'stroke-dasharray="{"0" if both_selected else "10 8"}" opacity="0.95"/>'
+    # Ana eksen çizgileri.
+    axis_r = inner_start + 4 * ring_width
+    background.extend([
+        f'<line x1="{cx-axis_r}" y1="{cy}" x2="{cx+axis_r}" y2="{cy}" stroke="#111827" stroke-width="2.5"/>',
+        f'<line x1="{cx}" y1="{cy-axis_r}" x2="{cx}" y2="{cy+axis_r}" stroke="#111827" stroke-width="2.5"/>',
+    ])
+
+    # Halkalar ve sektörler.
+    for subgroup_no in range(1, 5):
+        inner_r = inner_start + (subgroup_no - 1) * ring_width
+        outer_r = inner_r + ring_width
+
+        background.append(
+            f'<circle cx="{cx}" cy="{cy}" r="{outer_r}" fill="none" '
+            f'stroke="#111827" stroke-width="2.5"/>'
         )
 
-    region_shapes = []
-    subgroup_shapes = []
-
-    for region, (rx, ry) in region_positions.items():
-        region_color = REGION_COLORS[region]
-        region_shapes.append(
-            f'<circle cx="{rx}" cy="{ry}" r="150" fill="{region_color}" opacity="0.08" '
-            f'stroke="{region_color}" stroke-width="3"/>'
-        )
-        region_shapes.append(
-            f'<text x="{rx}" y="{ry-122}" text-anchor="middle" '
-            f'font-size="22" font-weight="800" fill="{region_color}">{region} BÖLGESİ</text>'
-        )
-
-    for group, (gx, gy) in subgroup_positions.items():
-        active = group in active_combo
-        region_color = REGION_COLORS[group[0]]
-        fill = region_color if active else "#FFFFFF"
-        text_color = "#FFFFFF" if active else region_color
-        stroke_width = 4 if active else 2
-
-        subgroup_shapes.append(
-            f'<circle cx="{gx}" cy="{gy}" r="{subgroup_r}" fill="{fill}" '
-            f'stroke="{region_color}" stroke-width="{stroke_width}"/>'
-        )
-        if group in selected_by_group:
-            subgroup_shapes.append(
-                f'<circle cx="{gx}" cy="{gy}" r="{subgroup_r + 8}" fill="none" '
-                f'stroke="#16A34A" stroke-width="5"/>'
+        for region, (start_angle, end_angle) in region_angles.items():
+            group_name = f"{region}{subgroup_no}"
+            path = annular_sector_path(
+                cx,
+                cy,
+                inner_r,
+                outer_r,
+                start_angle,
+                end_angle,
             )
-        subgroup_shapes.append(
-            f'<text x="{gx}" y="{gy+6}" text-anchor="middle" '
-            f'font-size="18" font-weight="800" fill="{text_color}">{group}</text>'
-        )
 
-        count = int((pharmacies["group"] == group).sum())
-        subgroup_shapes.append(
-            f'<text x="{gx}" y="{gy+67}" text-anchor="middle" '
-            f'font-size="12" fill="#475467">{count} eczane</text>'
-        )
-
-        if group in selected_by_group:
-            pid = selected_by_group[group]
-            name = pharmacies.loc[pharmacies["pharmacy_id"] == pid, "pharmacy_name"]
-            if not name.empty:
-                subgroup_shapes.append(
-                    f'<text x="{gx}" y="{gy-58}" text-anchor="middle" '
-                    f'font-size="12" font-weight="700" fill="#123B6D">{escape(name.iloc[0])}</text>'
+            if group_name in active_set:
+                active_shapes.append(
+                    f'<path d="{path}" fill="{region_colors[region]}" '
+                    f'fill-opacity="0.93" stroke="#111827" stroke-width="2"/>'
                 )
 
-    legend = """
-    <g transform="translate(40,650)">
-      <line x1="0" y1="0" x2="52" y2="0" stroke="#123B6D" stroke-width="5"/>
-      <text x="62" y="5" font-size="14" fill="#344054">Aktif eşlenik kombinasyonu</text>
-      <line x1="300" y1="0" x2="352" y2="0" stroke="#CBD5E1" stroke-width="2"/>
-      <text x="362" y="5" font-size="14" fill="#344054">Diğer olası eşlenikler</text>
-    </g>
+            if group_name in selected_by_group:
+                selected_overlays.append(
+                    f'<path d="{path}" fill="none" stroke="#16A34A" '
+                    f'stroke-width="7" opacity="0.98"/>'
+                )
+
+            # Etiket konumu sektörün ortasında.
+            mid_angle = (start_angle + end_angle) / 2
+            mid_radius = (inner_r + outer_r) / 2
+            tx, ty = polar(cx, cy, mid_radius, mid_angle)
+
+            is_active = group_name in active_set
+            label_color = "#FFFFFF" if is_active else "#344054"
+
+            labels.append(
+                f'<text x="{tx:.2f}" y="{ty+5:.2f}" text-anchor="middle" '
+                f'font-size="15" font-weight="800" fill="{label_color}">{group_name}</text>'
+            )
+
+            count = int((pharmacies["group"] == group_name).sum())
+            count_radius = mid_radius + 16
+            c_tx, c_ty = polar(cx, cy, count_radius, mid_angle)
+
+            labels.append(
+                f'<text x="{c_tx:.2f}" y="{c_ty+20:.2f}" text-anchor="middle" '
+                f'font-size="10" fill="{"#FFFFFF" if is_active else "#667085"}">'
+                f'{count} eczane</text>'
+            )
+
+            if group_name in selected_by_group:
+                pid = selected_by_group[group_name]
+                name_series = pharmacies.loc[
+                    pharmacies["pharmacy_id"] == pid,
+                    "pharmacy_name",
+                ]
+                if not name_series.empty:
+                    name_radius = outer_r + 18
+                    n_tx, n_ty = polar(cx, cy, name_radius, mid_angle)
+                    labels.append(
+                        f'<text x="{n_tx:.2f}" y="{n_ty:.2f}" text-anchor="middle" '
+                        f'font-size="12" font-weight="800" fill="#15803D">'
+                        f'{escape(name_series.iloc[0])}</text>'
+                    )
+
+    # Bölge başlıkları.
+    region_title_positions = {
+        "A": (cx - 255, cy - 255),
+        "B": (cx - 255, cy + 275),
+        "C": (cx + 255, cy + 275),
+        "D": (cx + 255, cy - 255),
+    }
+
+    region_titles = []
+    for region, (tx, ty) in region_title_positions.items():
+        region_titles.append(
+            f'<text x="{tx}" y="{ty}" text-anchor="middle" '
+            f'font-size="22" font-weight="900" fill="{region_colors[region]}">'
+            f'{region} BÖLGESİ</text>'
+        )
+
+    # Aktif kombinasyonu merkezde göster.
+    combo_text = "  •  ".join(active_combo)
+    center_text = f"""
+      <text x="{cx}" y="{cy-8}" text-anchor="middle"
+            font-size="13" font-weight="700" fill="#667085">AKTİF</text>
+      <text x="{cx}" y="{cy+14}" text-anchor="middle"
+            font-size="14" font-weight="900" fill="#123B6D">{combo_text}</text>
     """
 
+    # Sağ panel: seçilen eşlenikler.
+    selected_cards = []
+    panel_x = 920
+    panel_y = 170
+
+    selected_cards.append(
+        f'<rect x="{panel_x}" y="{panel_y}" width="225" height="420" rx="18" '
+        f'fill="#F8FAFC" stroke="#D0D5DD" stroke-width="1.5"/>'
+    )
+    selected_cards.append(
+        f'<text x="{panel_x+112}" y="{panel_y+38}" text-anchor="middle" '
+        f'font-size="18" font-weight="900" fill="#123B6D">Canlı Eşlenik Seçimi</text>'
+    )
+
+    card_y = panel_y + 72
+    for group_name in active_combo:
+        selected_pid = selected_by_group.get(group_name)
+        selected_name = "Henüz seçilmedi"
+
+        if selected_pid is not None:
+            selected_name_series = pharmacies.loc[
+                pharmacies["pharmacy_id"] == selected_pid,
+                "pharmacy_name",
+            ]
+            if not selected_name_series.empty:
+                selected_name = selected_name_series.iloc[0]
+
+        selected = selected_pid is not None
+        card_color = "#ECFDF3" if selected else "#FFFFFF"
+        border_color = "#16A34A" if selected else "#D0D5DD"
+
+        selected_cards.append(
+            f'<rect x="{panel_x+18}" y="{card_y}" width="189" height="62" rx="12" '
+            f'fill="{card_color}" stroke="{border_color}" stroke-width="2"/>'
+        )
+        selected_cards.append(
+            f'<circle cx="{panel_x+48}" cy="{card_y+31}" r="18" '
+            f'fill="{region_colors[group_name[0]]}"/>'
+        )
+        selected_cards.append(
+            f'<text x="{panel_x+48}" y="{card_y+36}" text-anchor="middle" '
+            f'font-size="13" font-weight="900" fill="#FFFFFF">{group_name}</text>'
+        )
+        selected_cards.append(
+            f'<text x="{panel_x+78}" y="{card_y+25}" '
+            f'font-size="13" font-weight="800" fill="#344054">'
+            f'{escape(selected_name)}</text>'
+        )
+        selected_cards.append(
+            f'<text x="{panel_x+78}" y="{card_y+44}" '
+            f'font-size="11" fill="{"#15803D" if selected else "#98A2B3"}">'
+            f'{"Seçim tamamlandı" if selected else "Haritadan eczane seçin"}</text>'
+        )
+        card_y += 76
+
     svg = f"""
-    <div style="width:100%; background:white; border:1px solid #E4E7EC; border-radius:18px; padding:8px;">
-      <svg width="100%" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg">
+    <div style="
+      width:100%;
+      background:white;
+      border:1px solid #E4E7EC;
+      border-radius:18px;
+      padding:8px;
+      overflow:hidden;">
+      <svg width="100%" viewBox="0 0 {width} {height}"
+           xmlns="http://www.w3.org/2000/svg">
         <rect width="100%" height="100%" rx="18" fill="#FFFFFF"/>
-        <text x="{cx}" y="38" text-anchor="middle" font-size="26" font-weight="800" fill="#123B6D">
-          AYÇA Grup ve Eşlenik Simülasyonu
+
+        <text x="{cx}" y="42" text-anchor="middle"
+              font-size="28" font-weight="900" fill="#123B6D">
+          AYÇA Çembersel Grup ve Eşlenik Simülasyonu
         </text>
-        <text x="{cx}" y="64" text-anchor="middle" font-size="14" fill="#667085">
-          Çembersel bölge yapısı ve günlük aktif kombinasyon
+        <text x="{cx}" y="70" text-anchor="middle"
+              font-size="14" fill="#667085">
+          İç halkadan dış halkaya: 1 → 2 → 3 → 4 alt grupları
         </text>
-        {''.join(region_shapes)}
-        {''.join(all_combo_lines)}
-        {active_line}
-        {''.join(live_lines)}
-        {''.join(subgroup_shapes)}
-        {legend}
+
+        {''.join(active_shapes)}
+        {''.join(background)}
+        {''.join(selected_overlays)}
+        {''.join(labels)}
+        {''.join(region_titles)}
+        {center_text}
+        {''.join(selected_cards)}
+
+        <g transform="translate(58,760)">
+          <rect x="0" y="-15" width="26" height="18" rx="4"
+                fill="#0EA5E9" opacity="0.93"/>
+          <text x="36" y="0" font-size="13" fill="#344054">
+            Aktif grup sektörü
+          </text>
+
+          <rect x="180" y="-15" width="26" height="18" rx="4"
+                fill="none" stroke="#16A34A" stroke-width="4"/>
+          <text x="216" y="0" font-size="13" fill="#344054">
+            Eczane seçimi tamamlanan grup
+          </text>
+        </g>
       </svg>
     </div>
     """
