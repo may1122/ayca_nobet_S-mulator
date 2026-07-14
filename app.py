@@ -249,6 +249,70 @@ def load_pharmacies() -> pd.DataFrame:
 
 pharmacies = load_pharmacies()
 
+def pharmacy_group_for_id(pharmacy_id: int | None) -> str | None:
+    if pharmacy_id is None:
+        return None
+
+    match = pharmacies.loc[
+        pharmacies["pharmacy_id"].astype(int) == int(pharmacy_id),
+        "group",
+    ]
+    if match.empty:
+        return None
+
+    return str(match.iloc[0]).strip().upper()
+
+
+def sanitize_selected_by_group(
+    selected_by_group: dict,
+    allowed_groups: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, int]:
+    """
+    Her grup anahtarında yalnızca aynı gruba ait eczane kalmasını sağlar.
+    Örnek: A1 anahtarına B2 eczanesi yazılmışsa seçim silinir.
+    """
+    allowed = (
+        {str(group).strip().upper() for group in allowed_groups}
+        if allowed_groups is not None
+        else None
+    )
+
+    cleaned: dict[str, int] = {}
+
+    for raw_group, raw_pharmacy_id in dict(selected_by_group).items():
+        group_name = str(raw_group).strip().upper()
+
+        if allowed is not None and group_name not in allowed:
+            continue
+
+        try:
+            pharmacy_id = int(raw_pharmacy_id)
+        except (TypeError, ValueError):
+            continue
+
+        actual_group = pharmacy_group_for_id(pharmacy_id)
+        if actual_group == group_name:
+            cleaned[group_name] = pharmacy_id
+
+    return cleaned
+
+
+def group_locked_candidates(
+    group_name: str,
+    candidates: pd.DataFrame,
+) -> pd.DataFrame:
+    """UI tarafında ikinci bir grup kilidi uygular."""
+    normalized = str(group_name).strip().upper()
+
+    if candidates.empty:
+        return candidates.copy()
+
+    return candidates[
+        candidates["group"].astype(str).str.strip().str.upper()
+        == normalized
+    ].copy()
+
+
 def marker_color(status: str) -> str:
     return {
         "selected": "blue",
@@ -1213,12 +1277,14 @@ if planning_mode == "Otomatik Çok Günlük Plan":
             {},
         )
 
-        st.session_state.selected_by_group = dict(
-            selected_by_group_for_map
+        locked_auto_selection = sanitize_selected_by_group(
+            selected_by_group_for_map,
+            allowed_groups=active_groups,
         )
+        st.session_state.selected_by_group = locked_auto_selection
         st.session_state.selection_source_by_group = {
             group_name: "AYÇA çok günlük otomatik plan"
-            for group_name in selected_by_group_for_map
+            for group_name in locked_auto_selection
         }
 
     else:
@@ -1239,6 +1305,20 @@ else:
     active_groups = group_for_day(
         (day_no - 1) % len(KOMB_ABC)
     )
+
+# Başka bir tarihten veya eski session state'ten yanlış grup seçimi
+# taşınmışsa burada temizlenir.
+cleaned_selections = sanitize_selected_by_group(
+    st.session_state.selected_by_group,
+    allowed_groups=active_groups,
+)
+if cleaned_selections != st.session_state.selected_by_group:
+    st.session_state.selected_by_group = cleaned_selections
+    st.session_state.selection_source_by_group = {
+        group_name: source
+        for group_name, source in st.session_state.selection_source_by_group.items()
+        if group_name in cleaned_selections
+    }
 
 combination_text = " + ".join(active_groups)
 selected_ids = list(st.session_state.selected_by_group.values())
@@ -1431,15 +1511,23 @@ with tab_map:
             elif clicked_row["status"] == "selected":
                 st.info(f'{clicked_row["pharmacy_name"]} zaten seçili.')
             elif bool(clicked_row["selectable"]):
-                previous = st.session_state.selected_by_group.get(clicked_group)
-                if previous != clicked_id:
-                    st.session_state.selected_by_group[clicked_group] = int(clicked_id)
-                    st.session_state.selection_source_by_group[clicked_group] = "Haritadan manuel seçim"
-                    st.toast(
-                        f'{clicked_row["pharmacy_name"]}, {clicked_group} grubu için seçildi.',
-                        icon="✅",
+                actual_group = pharmacy_group_for_id(clicked_id)
+
+                if actual_group != clicked_group:
+                    st.error(
+                        "Eczanenin kayıtlı grubu ile harita grubu uyuşmuyor. "
+                        "Seçim yapılmadı."
                     )
-                    st.rerun()
+                else:
+                    previous = st.session_state.selected_by_group.get(clicked_group)
+                    if previous != clicked_id:
+                        st.session_state.selected_by_group[clicked_group] = int(clicked_id)
+                        st.session_state.selection_source_by_group[clicked_group] = "Haritadan manuel seçim"
+                        st.toast(
+                            f'{clicked_row["pharmacy_name"]}, {clicked_group} grubu için seçildi.',
+                            icon="✅",
+                        )
+                        st.rerun()
             else:
                 st.error(
                     f'{clicked_row["pharmacy_name"]} seçilemez: {clicked_row["reason"]}'
@@ -1493,7 +1581,14 @@ with tab_map:
                 min_gap_days=min_gap_days,
             )
 
-            selectable = candidates[candidates["selectable"]].sort_values("decision_score", ascending=False)
+            candidates = group_locked_candidates(
+                group_name=group_name,
+                candidates=candidates,
+            )
+
+            selectable = candidates[
+                candidates["selectable"]
+            ].sort_values("decision_score", ascending=False)
             blocked = candidates[~candidates["selectable"]]
 
             st.markdown(f"#### {group_name} Grubu")
@@ -1503,15 +1598,33 @@ with tab_map:
 
             current_pid = st.session_state.selected_by_group.get(group_name)
 
+            # Mevcut seçim bu gruba ait değilse kesin olarak temizle.
+            if (
+                current_pid is not None
+                and pharmacy_group_for_id(current_pid)
+                != str(group_name).strip().upper()
+            ):
+                st.session_state.selected_by_group.pop(group_name, None)
+                st.session_state.selection_source_by_group.pop(group_name, None)
+                current_pid = None
+
             option_ids = [None] + selectable["pharmacy_id"].astype(int).tolist()
-            if current_pid is not None and current_pid not in option_ids:
+
+            # Seçili eczane sadece gerçekten bu grubun üyesiyse listeye korunarak eklenir.
+            if (
+                current_pid is not None
+                and pharmacy_group_for_id(current_pid)
+                == str(group_name).strip().upper()
+                and current_pid not in option_ids
+            ):
                 option_ids.insert(1, int(current_pid))
 
             labels = {None: "— Eczane seç —"}
             labels.update(
                 {
                     int(r["pharmacy_id"]): (
-                        f'{r["pharmacy_name"]} | uygunluk %{r["decision_score"]:.0f}'
+                        f'{r["pharmacy_name"]} · {r["group"]} | '
+                        f'uygunluk %{r["decision_score"]:.0f}'
                     )
                     for _, r in selectable.iterrows()
                 }
@@ -1541,9 +1654,18 @@ with tab_map:
 
             if planning_mode == "Tek Gün / Manuel Seçim":
                 if chosen is not None and chosen != current_pid:
-                    st.session_state.selected_by_group[group_name] = int(chosen)
-                    st.session_state.selection_source_by_group[group_name] = "Listeden manuel seçim"
-                    st.rerun()
+                    chosen_group = pharmacy_group_for_id(int(chosen))
+                    expected_group = str(group_name).strip().upper()
+
+                    if chosen_group != expected_group:
+                        st.error(
+                            f"{expected_group} için yalnızca "
+                            f"{expected_group} grubundaki eczaneler seçilebilir."
+                        )
+                    else:
+                        st.session_state.selected_by_group[group_name] = int(chosen)
+                        st.session_state.selection_source_by_group[group_name] = "Listeden manuel seçim"
+                        st.rerun()
                 elif chosen is None and current_pid is not None:
                     st.session_state.selected_by_group.pop(group_name, None)
                     st.session_state.selection_source_by_group.pop(group_name, None)
