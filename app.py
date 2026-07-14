@@ -3,11 +3,15 @@ from __future__ import annotations
 from datetime import date, timedelta
 from pathlib import Path
 import math
+import re
 
 import pandas as pd
 import pydeck as pdk
 import streamlit as st
 import streamlit.components.v1 as components
+import folium
+from folium.plugins import MarkerCluster
+from streamlit_folium import st_folium
 
 from algorithm import (
     KOMB_ABC,
@@ -68,6 +72,110 @@ def load_pharmacies() -> pd.DataFrame:
     return df
 
 pharmacies = load_pharmacies()
+
+def marker_color(status: str) -> str:
+    return {
+        "selected": "blue",
+        "selectable": "green",
+        "distance_blocked": "red",
+        "gap_blocked": "orange",
+        "inactive": "gray",
+    }.get(status, "gray")
+
+
+def clicked_pharmacy_id(map_event: dict | None) -> int | None:
+    if not map_event:
+        return None
+
+    tooltip = map_event.get("last_object_clicked_tooltip")
+    if not tooltip:
+        return None
+
+    match = re.search(r"PID:(\d+)", str(tooltip))
+    return int(match.group(1)) if match else None
+
+
+def build_folium_map(
+    map_df: pd.DataFrame,
+    selected_df: pd.DataFrame,
+    min_distance_km: float,
+) -> folium.Map:
+    center = [float(map_df["lat"].mean()), float(map_df["lon"].mean())]
+    fmap = folium.Map(
+        location=center,
+        zoom_start=12,
+        tiles="CartoDB positron",
+        control_scale=True,
+    )
+
+    # Seçilen eczanelerin minimum mesafe çemberleri.
+    for row in selected_df.itertuples():
+        folium.Circle(
+            location=[row.lat, row.lon],
+            radius=min_distance_km * 1000,
+            color="#1D4ED8",
+            weight=2,
+            fill=True,
+            fill_color="#1D4ED8",
+            fill_opacity=0.08,
+            tooltip=f"{row.pharmacy_name} minimum mesafe alanı",
+        ).add_to(fmap)
+
+    # MarkerCluster kullanmadan doğrudan marker ekliyoruz; böylece her marker tıklanabilir.
+    for row in map_df.itertuples():
+        score_text = "-" if pd.isna(row.decision_score) else f"{float(row.decision_score):.2f}"
+        distance_text = (
+            "-"
+            if pd.isna(row.distance_to_nearest_selected_km)
+            else f"{float(row.distance_to_nearest_selected_km):.2f} km"
+        )
+        tooltip = f"PID:{int(row.pharmacy_id)} | {row.pharmacy_name} | {row.group}"
+
+        popup_html = f"""
+        <div style="font-family:Arial; min-width:230px">
+          <b style="font-size:15px">{row.pharmacy_name}</b><br>
+          <b>Grup:</b> {row.group}<br>
+          <b>Durum:</b> {row.status}<br>
+          <b>Gerekçe:</b> {row.reason}<br>
+          <b>Karar skoru:</b> {score_text}<br>
+          <b>En yakın seçili:</b> {distance_text}
+        </div>
+        """
+
+        folium.CircleMarker(
+            location=[row.lat, row.lon],
+            radius=9 if row.status == "selected" else 6,
+            color="white",
+            weight=2,
+            fill=True,
+            fill_color=marker_color(row.status),
+            fill_opacity=0.95,
+            tooltip=tooltip,
+            popup=folium.Popup(popup_html, max_width=320),
+        ).add_to(fmap)
+
+        # Aktif adayların isimleri haritada sürekli görünür.
+        if row.status in {"selected", "selectable"}:
+            folium.Marker(
+                location=[row.lat, row.lon],
+                icon=folium.DivIcon(
+                    html=f"""
+                    <div style="
+                      transform: translate(-45%, -30px);
+                      white-space: nowrap;
+                      font-size: 10px;
+                      font-weight: 700;
+                      color: #123B6D;
+                      text-shadow: 0 0 3px white, 0 0 3px white;">
+                      {row.pharmacy_name}
+                    </div>
+                    """
+                ),
+                interactive=False,
+            ).add_to(fmap)
+
+    return fmap
+
 
 if "state" not in st.session_state:
     st.session_state.state = SimulationState.from_dataframe(pharmacies)
@@ -182,6 +290,8 @@ with tab_map:
     base_map_df["reason"] = "Bugünkü aktif kombinasyonda değil"
     base_map_df["decision_score"] = None
     base_map_df["distance_to_nearest_selected_km"] = None
+    base_map_df["days_since_last_duty"] = None
+    base_map_df["selectable"] = False
 
     lookup = status_df.set_index("pharmacy_id")
 
@@ -195,6 +305,8 @@ with tab_map:
             base_map_df.at[idx, "reason"] = info["reason"]
             base_map_df.at[idx, "decision_score"] = info["decision_score"]
             base_map_df.at[idx, "distance_to_nearest_selected_km"] = info["distance_to_nearest_selected_km"]
+            base_map_df.at[idx, "days_since_last_duty"] = info["days_since_last_duty"]
+            base_map_df.at[idx, "selectable"] = bool(info["selectable"])
 
     for group_name, pid in st.session_state.selected_by_group.items():
         base_map_df.loc[base_map_df["pharmacy_id"] == pid, "status"] = "selected"
@@ -214,84 +326,50 @@ with tab_map:
 
     with left:
         st.subheader("Şehir Haritası")
+        st.caption("Bir eczane işaretine tıklayın. Uygunsa ilgili aktif grup için doğrudan seçilir.")
 
-        layers = []
-
-        selected_df = base_map_df[base_map_df["status"] == "selected"]
-        if not selected_df.empty:
-            layers.append(
-                pdk.Layer(
-                    "ScatterplotLayer",
-                    data=selected_df,
-                    get_position="[lon, lat]",
-                    get_fill_color=[29, 78, 216, 20],
-                    get_line_color=[29, 78, 216, 110],
-                    get_radius=min_distance_km * 1000,
-                    stroked=True,
-                    filled=True,
-                    line_width_min_pixels=2,
-                    pickable=False,
-                )
-            )
-
-        layers.append(
-            pdk.Layer(
-                "ScatterplotLayer",
-                data=base_map_df,
-                get_position="[lon, lat]",
-                get_fill_color="color",
-                get_radius="radius",
-                pickable=True,
-                opacity=0.9,
-                stroked=True,
-                get_line_color=[255, 255, 255],
-                line_width_min_pixels=1,
-            )
+        selected_df = base_map_df[base_map_df["status"] == "selected"].copy()
+        fmap = build_folium_map(
+            map_df=base_map_df,
+            selected_df=selected_df,
+            min_distance_km=min_distance_km,
         )
 
-        label_df = base_map_df[base_map_df["status"].isin(["selected", "selectable"])].copy()
-        layers.append(
-            pdk.Layer(
-                "TextLayer",
-                data=label_df,
-                get_position="[lon, lat]",
-                get_text="pharmacy_name",
-                get_size=12,
-                get_color=[18, 59, 109],
-                get_alignment_baseline="'bottom'",
-                get_pixel_offset=[0, -10],
-                pickable=False,
-            )
-        )
-
-        view_state = pdk.ViewState(
-            latitude=float(pharmacies["lat"].mean()),
-            longitude=float(pharmacies["lon"].mean()),
-            zoom=11.8,
-            pitch=28,
-        )
-
-        tooltip = {
-            "html": """
-            <b>{pharmacy_name}</b><br/>
-            Grup: {group}<br/>
-            Durum: {status}<br/>
-            Gerekçe: {reason}<br/>
-            Skor: {decision_score}<br/>
-            En yakın seçili eczane: {distance_to_nearest_selected_km} km
-            """,
-            "style": {"backgroundColor": "#123B6D", "color": "white"},
-        }
-
-        st.pydeck_chart(
-            pdk.Deck(
-                map_style="light",
-                initial_view_state=view_state,
-                layers=layers,
-                tooltip=tooltip,
-            ),
+        map_event = st_folium(
+            fmap,
+            height=610,
             use_container_width=True,
+            returned_objects=["last_object_clicked_tooltip"],
+            key=f"ayca_map_{day_no}_{len(selected_ids)}",
         )
+
+        clicked_id = clicked_pharmacy_id(map_event)
+        if clicked_id is not None:
+            clicked_row = base_map_df.loc[
+                base_map_df["pharmacy_id"] == clicked_id
+            ].iloc[0]
+            clicked_group = str(clicked_row["group"])
+
+            if clicked_group not in active_groups:
+                st.warning(
+                    f'{clicked_row["pharmacy_name"]}, bugünkü aktif kombinasyonda '
+                    f"yer almayan {clicked_group} grubundadır."
+                )
+            elif clicked_row["status"] == "selected":
+                st.info(f'{clicked_row["pharmacy_name"]} zaten seçili.')
+            elif bool(clicked_row["selectable"]):
+                previous = st.session_state.selected_by_group.get(clicked_group)
+                if previous != clicked_id:
+                    st.session_state.selected_by_group[clicked_group] = int(clicked_id)
+                    st.toast(
+                        f'{clicked_row["pharmacy_name"]}, {clicked_group} grubu için seçildi.',
+                        icon="✅",
+                    )
+                    st.rerun()
+            else:
+                st.error(
+                    f'{clicked_row["pharmacy_name"]} seçilemez: {clicked_row["reason"]}'
+                )
 
         with st.expander("Haritadaki adayları tablo olarak göster"):
             display_cols = [
@@ -304,9 +382,19 @@ with tab_map:
                 "historical_load",
                 "decision_score",
             ]
+            available_cols = [c for c in display_cols if c in base_map_df.columns]
+            table_df = (
+                base_map_df.loc[
+                    base_map_df["group"].isin(active_groups),
+                    available_cols,
+                ]
+                .sort_values(
+                    [c for c in ["group", "status", "decision_score"] if c in available_cols],
+                    na_position="last",
+                )
+            )
             st.dataframe(
-                base_map_df[base_map_df["group"].isin(active_groups)][display_cols]
-                .sort_values(["group", "status", "decision_score"]),
+                table_df,
                 use_container_width=True,
                 hide_index=True,
             )
@@ -400,7 +488,7 @@ with tab_groups:
     )
 
     st.markdown(
-        '<div class="small-note">Kalın mavi çizgiler seçilen günün aktif eşleniklerini, açık gri çizgiler diğer olası kombinasyonları gösterir.</div>',
+        '<div class="small-note">Kalın mavi çizgiler seçilen günün aktif eşleniklerini gösterir. Haritadan eczane seçildikçe ilgili grup düğümü ve seçilen eczane etiketi canlı güncellenir.</div>',
         unsafe_allow_html=True,
     )
 
