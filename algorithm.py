@@ -329,7 +329,20 @@ def eligible_candidates(
         pharmacies["pharmacy_id"].astype(int).isin(selected_ids)
     ]
 
-    result = pharmacies[pharmacies["group"] == group_name].copy()
+    normalized_group_name = str(group_name).strip().upper()
+
+    result = pharmacies[
+        pharmacies["group"].astype(str).str.strip().str.upper()
+        == normalized_group_name
+    ].copy()
+
+    # Güvenlik kilidi: bu fonksiyon hiçbir koşulda başka gruptan
+    # eczane döndürmez.
+    if not result.empty:
+        result = result[
+            result["group"].astype(str).str.strip().str.upper()
+            == normalized_group_name
+        ].copy()
 
     distances = []
     gaps = []
@@ -422,6 +435,18 @@ def eligible_candidates(
     result["reason"] = reasons
     result["selectable"] = selectable_values
     result["decision_score"] = scores
+    result["requested_group"] = normalized_group_name
+
+    # Son güvenlik kontrolü.
+    invalid_group_rows = result[
+        result["group"].astype(str).str.strip().str.upper()
+        != normalized_group_name
+    ]
+    if not invalid_group_rows.empty:
+        raise ValueError(
+            f"{normalized_group_name} aday listesine başka gruptan "
+            "eczane karıştı."
+        )
 
     return result
 
