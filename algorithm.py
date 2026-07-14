@@ -505,7 +505,9 @@ def build_group_svg(
             f"A {inner_r},{inner_r} 0 {large},0 {x4:.2f},{y4:.2f} Z"
         )
 
-    active_set = set(active_combo)
+    active_set = {str(group).strip().upper() for group in active_combo}
+    # Aktif kombinasyon yalnızca sektör rengini değiştirir.
+    # A1/B1/C1/D1 her zaman iç halkada; 4'lü gruplar dış halkada kalır.
     svg_parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="white"/>',
@@ -553,9 +555,9 @@ def build_group_svg(
             f'<text x="{cx - 285}" y="{cy + 285}" font-size="20" font-weight="800" fill="#16C96F">B BÖLGESİ</text>',
             f'<text x="{cx + 175}" y="{cy + 285}" font-size="20" font-weight="800" fill="#F39ACD">C BÖLGESİ</text>',
             f'<text x="{cx + 175}" y="{cy - 285}" font-size="20" font-weight="800" fill="#B444ED">D BÖLGESİ</text>',
-            f'<circle cx="{cx}" cy="{cy}" r="52" fill="white" stroke="#101828" stroke-width="2"/>',
-            f'<text x="{cx}" y="{cy - 8}" text-anchor="middle" font-size="11" fill="#667085">AKTİF</text>',
-            f'<text x="{cx}" y="{cy + 12}" text-anchor="middle" font-size="15" font-weight="800" fill="#123B6D">{" • ".join(active_combo)}</text>',
+            f'<circle cx="{cx}" cy="{cy}" r="20" fill="white" stroke="#101828" stroke-width="2"/>',
+            f'<text x="{cx}" y="{cy - 3}" text-anchor="middle" font-size="8" fill="#667085">AKTİF</text>',
+            f'<text x="{cx}" y="{cy + 9}" text-anchor="middle" font-size="7" font-weight="800" fill="#123B6D">GÜN</text>',
         ]
     )
 
