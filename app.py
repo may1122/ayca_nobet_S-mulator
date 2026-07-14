@@ -1175,4 +1175,32 @@ with tab_plan:
 
                     st.write(
                         f"**Neden seçildi?** {selection_reason(selected_row)}. "
-                        "Grup uygunluğu, minimum nöbet aralığı, mesafe ve geçmiş görev yükü birlikte değerle
+                        "Grup uygunluğu, minimum nöbet aralığı, mesafe ve geçmiş görev yükü birlikte değerlendirildi."
+                    )
+
+        st.markdown("### 8 Günlük Grup Rotasyonu")
+
+        rotation_rows = []
+        for idx, combo in enumerate(KOMB_ABC, start=1):
+            rotation_rows.append(
+                {
+                    "Gün": idx,
+                    "Grup Kombinasyonu": " • ".join(combo),
+                    "Durum": (
+                        "Aktif"
+                        if idx == ((day_no - 1) % len(KOMB_ABC)) + 1
+                        else ""
+                    ),
+                }
+            )
+
+        st.dataframe(
+            pd.DataFrame(rotation_rows),
+            use_container_width=True,
+            hide_index=True,
+            height=300,
+        )
+
+st.caption(
+    "Not: Bu demo sentetik eczane ve koordinat verileri kullanır. Gerçek kurulumda oda tarafından sağlanan grup, koordinat ve geçmiş nöbet verileri sisteme aktarılır."
+)
