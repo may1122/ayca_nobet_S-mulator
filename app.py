@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from pathlib import Path
+from textwrap import dedent
 import math
 import re
 
@@ -201,27 +202,30 @@ def build_decision_engine_card(row: pd.Series, min_gap_days: int, min_distance_k
     for title, passed, detail in checks:
         color = "#16A34A" if passed else "#F59E0B"
         icon = "✓" if passed else "!"
-        rows_html += f"""
-        <div style="display:flex;align-items:center;justify-content:space-between;
-                    padding:9px 0;border-bottom:1px solid #EEF2F6;">
-          <div style="display:flex;align-items:center;gap:9px;">
-            <span style="width:22px;height:22px;border-radius:50%;background:{color};
-                         color:white;display:inline-flex;align-items:center;justify-content:center;
-                         font-weight:800;font-size:12px;">{icon}</span>
-            <span style="font-weight:700;color:#344054;">{title}</span>
-          </div>
-          <span style="color:#667085;font-size:12px;">{detail}</span>
-        </div>
-        """
+        rows_html += dedent(
+            f"""
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                        padding:9px 0;border-bottom:1px solid #EEF2F6;">
+              <div style="display:flex;align-items:center;gap:9px;">
+                <span style="width:22px;height:22px;border-radius:50%;background:{color};
+                             color:white;display:inline-flex;align-items:center;justify-content:center;
+                             font-weight:800;font-size:12px;">{icon}</span>
+                <span style="font-weight:700;color:#344054;">{title}</span>
+              </div>
+              <span style="color:#667085;font-size:12px;">{detail}</span>
+            </div>
+            """
+        ).strip()
 
     score_color = "#16A34A" if score >= 80 else "#F59E0B" if score >= 60 else "#DC2626"
     result_text = "Nöbete atanabilir" if selectable else "Şu anda atanamaz"
     result_bg = "#ECFDF3" if selectable else "#FEF2F2"
     result_color = "#15803D" if selectable else "#B91C1C"
 
-    return f"""
-    <div style="border:1px solid #D0D5DD;border-radius:18px;padding:18px;background:#FFFFFF;
-                box-shadow:0 8px 22px rgba(16,24,40,.06);">
+    return dedent(
+        f"""
+        <div style="border:1px solid #D0D5DD;border-radius:18px;padding:18px;background:#FFFFFF;
+                    box-shadow:0 8px 22px rgba(16,24,40,.06);">
       <div style="font-size:19px;font-weight:900;color:#123B6D;margin-bottom:4px;">
         AYÇA Decision Engine
       </div>
@@ -241,8 +245,9 @@ def build_decision_engine_card(row: pd.Series, min_gap_days: int, min_distance_k
           {"✅" if selectable else "⛔"} {result_text}
         </div>
       </div>
-    </div>
-    """
+        </div>
+        """
+    ).strip()
 
 
 def build_folium_map(
@@ -426,8 +431,9 @@ status_text = "Plan hazır" if assignment_complete else "Atamalar devam ediyor"
 status_icon = "✓" if assignment_complete else "…"
 
 st.markdown(
-    f"""
-    <div class="summary-wrap">
+    dedent(
+        f"""
+        <div class="summary-wrap">
       <div class="summary-title">Bugünün Nöbet Özeti</div>
       <div class="summary-grid">
 
@@ -456,8 +462,9 @@ st.markdown(
         </div>
 
       </div>
-    </div>
-    """,
+        </div>
+        """
+    ).strip(),
     unsafe_allow_html=True,
 )
 
