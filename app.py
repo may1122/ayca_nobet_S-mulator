@@ -195,6 +195,22 @@ st.markdown(
         @media (max-width: 650px) {
             .plan-grid {grid-template-columns: 1fr;}
         }
+
+        /* Harita sütunu masaüstünde kaydırma sırasında görünür kalır. */
+        @media (min-width: 901px) {
+            div[data-testid="stColumn"]:has(.sticky-map-anchor) {
+                position: sticky;
+                top: 0.75rem;
+                align-self: flex-start;
+                z-index: 20;
+            }
+        }
+
+        .sticky-map-anchor {
+            height: 1px;
+            width: 1px;
+            overflow: hidden;
+        }
     </style>
     """,
     unsafe_allow_html=True,
@@ -379,7 +395,11 @@ def build_plan_cards(
             continue
 
         group_df = candidates_by_group.get(group_name, pd.DataFrame())
-        match = group_df.loc[group_df["pharmacy_id"] == pid] if not group_df.empty else pd.DataFrame()
+        match = (
+            group_df.loc[group_df["pharmacy_id"] == pid]
+            if not group_df.empty
+            else pd.DataFrame()
+        )
 
         if match.empty:
             pharmacy_match = pharmacies.loc[pharmacies["pharmacy_id"] == pid]
@@ -406,9 +426,76 @@ def build_plan_cards(
 
     return dedent(
         f"""
-        <div class="plan-grid">
-          {''.join(cards)}
-        </div>
+        <!DOCTYPE html>
+        <html lang="tr">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            * {{ box-sizing: border-box; }}
+            body {{
+              margin: 0;
+              padding: 2px;
+              background: transparent;
+              font-family: Arial, Helvetica, sans-serif;
+              color: #101828;
+            }}
+            .plan-grid {{
+              display: grid;
+              grid-template-columns: repeat(4, minmax(0, 1fr));
+              gap: 12px;
+            }}
+            .plan-card {{
+              border: 1px solid #E4E7EC;
+              border-radius: 16px;
+              background: #FFFFFF;
+              padding: 15px;
+              min-height: 154px;
+              box-shadow: 0 6px 18px rgba(16,24,40,.05);
+            }}
+            .plan-card.empty {{
+              background: #F8FAFC;
+              border-style: dashed;
+            }}
+            .plan-group {{
+              font-size: 12px;
+              font-weight: 900;
+              color: #667085;
+              margin-bottom: 8px;
+            }}
+            .plan-name {{
+              color: #123B6D;
+              font-size: 18px;
+              font-weight: 900;
+              line-height: 1.2;
+              margin-bottom: 8px;
+            }}
+            .plan-detail {{
+              color: #667085;
+              font-size: 12px;
+              line-height: 1.5;
+            }}
+            .plan-source {{
+              display: inline-block;
+              margin-top: 10px;
+              padding: 5px 9px;
+              border-radius: 999px;
+              background: #EFF6FF;
+              color: #1D4ED8;
+              font-size: 11px;
+              font-weight: 800;
+            }}
+            @media (max-width: 900px) {{
+              .plan-grid {{ grid-template-columns: 1fr 1fr; }}
+            }}
+          </style>
+        </head>
+        <body>
+          <div class="plan-grid">
+            {''.join(cards)}
+          </div>
+        </body>
+        </html>
         """
     ).strip()
 
@@ -714,6 +801,10 @@ with tab_map:
     ).fillna(80)
 
     with left:
+        st.markdown(
+            '<div class="sticky-map-anchor"></div>',
+            unsafe_allow_html=True,
+        )
         st.subheader("Bugün Seçilebilecek Eczaneler")
         st.caption("Bir eczane işaretine tıklayın. Sistem uygunluk puanını ve tüm karar kontrollerini canlı gösterir.")
 
@@ -947,14 +1038,15 @@ with tab_plan:
             min_gap_days=min_gap_days,
         )
 
-    st.markdown(
+    components.html(
         build_plan_cards(
             active_groups=active_groups,
             selected_by_group=st.session_state.selected_by_group,
             source_by_group=st.session_state.selection_source_by_group,
             candidates_by_group=candidates_by_group,
         ),
-        unsafe_allow_html=True,
+        height=190,
+        scrolling=False,
     )
 
     plan_left, plan_right = st.columns([1.45, 1], gap="large")
@@ -1083,32 +1175,4 @@ with tab_plan:
 
                     st.write(
                         f"**Neden seçildi?** {selection_reason(selected_row)}. "
-                        "Grup uygunluğu, minimum nöbet aralığı, mesafe ve geçmiş görev yükü birlikte değerlendirildi."
-                    )
-
-        st.markdown("### 8 Günlük Grup Rotasyonu")
-
-        rotation_rows = []
-        for idx, combo in enumerate(KOMB_ABC, start=1):
-            rotation_rows.append(
-                {
-                    "Gün": idx,
-                    "Grup Kombinasyonu": " • ".join(combo),
-                    "Durum": (
-                        "Aktif"
-                        if idx == ((day_no - 1) % len(KOMB_ABC)) + 1
-                        else ""
-                    ),
-                }
-            )
-
-        st.dataframe(
-            pd.DataFrame(rotation_rows),
-            use_container_width=True,
-            hide_index=True,
-            height=300,
-        )
-
-st.caption(
-    "Not: Bu demo sentetik eczane ve koordinat verileri kullanır. Gerçek kurulumda oda tarafından sağlanan grup, koordinat ve geçmiş nöbet verileri sisteme aktarılır."
-)
+                        "Grup uygunluğu, minimum nöbet aralığı, mesafe ve geçmiş görev yükü birlikte değerle
