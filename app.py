@@ -1,4 +1,435 @@
- minimum mesafe alanı",
+from __future__ import annotations
+
+from datetime import date, timedelta
+from pathlib import Path
+from textwrap import dedent
+import math
+import re
+
+import pandas as pd
+import pydeck as pdk
+import streamlit as st
+import streamlit.components.v1 as components
+import folium
+from folium.plugins import MarkerCluster
+from streamlit_folium import st_folium
+
+from algorithm import (
+    KOMB_ABC,
+    SimulationState,
+    eligible_candidates,
+    generate_pharmacies,
+    group_for_day,
+    status_palette,
+    build_group_svg,
+)
+
+st.set_page_config(
+    page_title="AYÇA Nöbet | Grup Simülasyonu",
+    page_icon="💊",
+    layout="wide",
+)
+
+st.markdown(
+    """
+    <style>
+        .block-container {padding-top: 1.1rem; padding-bottom: 2rem;}
+        .ayca-title {font-size: 2rem; font-weight: 800; color: #123B6D; margin-bottom: .1rem;}
+        .ayca-subtitle {color: #667085; margin-bottom: 1rem;}
+        div[data-testid="stMetric"] {
+            border: 1px solid #E4E7EC; padding: 12px 14px; border-radius: 14px;
+            background: white;
+        }
+        .legend {
+            display:flex; gap:14px; flex-wrap:wrap; font-size:.9rem; color:#475467;
+            margin:.4rem 0 1rem 0;
+        }
+        .legend span {display:flex; align-items:center; gap:6px;}
+        .dot {width:11px; height:11px; border-radius:50%; display:inline-block;}
+        .small-note {font-size:.88rem; color:#667085;}
+        .group-pill {
+            display:inline-block; padding:6px 10px; border-radius:999px;
+            background:#EAF3FA; color:#123B6D; font-weight:700; margin-right:6px;
+        }
+        .summary-wrap {
+            border: 1px solid #E4E7EC;
+            border-radius: 18px;
+            background: #FFFFFF;
+            padding: 18px 20px;
+            margin: 6px 0 18px 0;
+            box-shadow: 0 6px 18px rgba(16,24,40,.05);
+        }
+        .summary-title {
+            font-size: 15px;
+            font-weight: 800;
+            color: #123B6D;
+            margin-bottom: 12px;
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: 1.15fr 1.45fr 1fr 1fr;
+            gap: 12px;
+        }
+        .summary-item {
+            border: 1px solid #EEF2F6;
+            border-radius: 14px;
+            padding: 14px 16px;
+            background: #F8FAFC;
+            min-height: 86px;
+        }
+        .summary-label {
+            color: #667085;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .summary-value {
+            color: #101828;
+            font-size: 22px;
+            font-weight: 900;
+            line-height: 1.15;
+        }
+        .summary-sub {
+            color: #667085;
+            font-size: 12px;
+            margin-top: 6px;
+        }
+        .group-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-top: 2px;
+        }
+        .group-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 42px;
+            height: 34px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 900;
+            font-size: 15px;
+            padding: 0 10px;
+        }
+        .status-ready {
+            color: #15803D;
+            background: #ECFDF3;
+            border: 1px solid #BBF7D0;
+            border-radius: 999px;
+            display: inline-block;
+            padding: 6px 10px;
+            font-size: 13px;
+            font-weight: 800;
+            margin-top: 2px;
+        }
+        @media (max-width: 900px) {
+            .summary-grid {grid-template-columns: 1fr 1fr;}
+        }
+
+        /* Harita sütununu masaüstünde görünür tutar. */
+        @media (min-width: 901px) {
+            div[data-testid="stHorizontalBlock"]:has(.sticky-map-anchor) > div:first-child {
+                position: sticky;
+                top: 0.75rem;
+                align-self: flex-start;
+                z-index: 5;
+            }
+        }
+
+        .selection-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            margin: 8px 0 18px 0;
+        }
+
+        .selection-card {
+            border: 1px solid #E4E7EC;
+            border-radius: 14px;
+            background: #FFFFFF;
+            padding: 14px;
+            min-height: 132px;
+            box-shadow: 0 4px 14px rgba(16,24,40,.04);
+        }
+
+        .selection-card.empty {
+            background: #F8FAFC;
+            border-style: dashed;
+        }
+
+        .selection-group {
+            font-size: 12px;
+            font-weight: 900;
+            color: #667085;
+            margin-bottom: 8px;
+        }
+
+        .selection-name {
+            font-size: 17px;
+            font-weight: 900;
+            color: #123B6D;
+            line-height: 1.2;
+            margin-bottom: 7px;
+        }
+
+        .selection-meta {
+            color: #667085;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .selection-source {
+            display: inline-block;
+            margin-top: 9px;
+            padding: 5px 8px;
+            border-radius: 999px;
+            background: #EFF6FF;
+            color: #1D4ED8;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        @media (max-width: 1100px) {
+            .selection-grid {grid-template-columns: 1fr 1fr;}
+        }
+
+        @media (max-width: 650px) {
+            .selection-grid {grid-template-columns: 1fr;}
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown('<div class="ayca-title">AYÇA Nöbet — Akıllı Grup Simülasyonu</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="ayca-subtitle">Bugünün nöbet gruplarını, uygun eczaneleri ve oluşturulan planı canlı olarak inceleyin</div>',
+    unsafe_allow_html=True,
+)
+
+DATA_PATH = Path(__file__).with_name("pharmacies.csv")
+
+@st.cache_data
+def load_pharmacies() -> pd.DataFrame:
+    if DATA_PATH.exists():
+        return pd.read_csv(DATA_PATH)
+    df = generate_pharmacies(seed=42)
+    df.to_csv(DATA_PATH, index=False)
+    return df
+
+pharmacies = load_pharmacies()
+
+def marker_color(status: str) -> str:
+    return {
+        "selected": "blue",
+        "selectable": "green",
+        "distance_blocked": "red",
+        "gap_blocked": "orange",
+        "inactive": "gray",
+    }.get(status, "gray")
+
+
+def clicked_pharmacy_id(map_event: dict | None) -> int | None:
+    if not map_event:
+        return None
+
+    tooltip = map_event.get("last_object_clicked_tooltip")
+    if not tooltip:
+        return None
+
+    match = re.search(r"PID:(\d+)", str(tooltip))
+    return int(match.group(1)) if match else None
+
+
+
+def build_decision_engine_card(row: pd.Series, min_gap_days: int, min_distance_km: float) -> str:
+    score = float(row.get("decision_score", 0) or 0)
+    gap = row.get("days_since_last_duty")
+    distance = row.get("distance_to_nearest_selected_km")
+    historical_load = float(row.get("historical_load", 0) or 0)
+    weekend_count = int(row.get("weekend_count", 0) or 0)
+    holiday_count = int(row.get("holiday_count", 0) or 0)
+    selectable = bool(row.get("selectable", False))
+
+    checks = [
+        ("Grup kontrolü", True, f'{row.get("group", "-")} aktif grupta'),
+        (
+            "Yakınlık kontrolü",
+            distance is None or float(distance) >= min_distance_km,
+            "Uygun" if distance is None else f"{float(distance):.2f} km",
+        ),
+        (
+            f"{min_gap_days} gün kontrolü",
+            gap is not None and float(gap) >= min_gap_days,
+            "-" if gap is None else f"{int(gap)} gün",
+        ),
+        ("Geçmiş yük dengesi", historical_load <= 8.5, f"{historical_load:.1f} yük"),
+        ("Hafta sonu dengesi", weekend_count <= 2, f"{weekend_count} nöbet"),
+        ("Bayram dengesi", holiday_count <= 1, f"{holiday_count} nöbet"),
+    ]
+
+    rows_html = ""
+    for title, passed, detail in checks:
+        color = "#16A34A" if passed else "#F59E0B"
+        icon = "✓" if passed else "!"
+        rows_html += dedent(
+            f"""
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                        padding:9px 0;border-bottom:1px solid #EEF2F6;">
+              <div style="display:flex;align-items:center;gap:9px;">
+                <span style="width:22px;height:22px;border-radius:50%;background:{color};
+                             color:white;display:inline-flex;align-items:center;justify-content:center;
+                             font-weight:800;font-size:12px;">{icon}</span>
+                <span style="font-weight:700;color:#344054;">{title}</span>
+              </div>
+              <span style="color:#667085;font-size:12px;">{detail}</span>
+            </div>
+            """
+        ).strip()
+
+    score_color = "#16A34A" if score >= 80 else "#F59E0B" if score >= 60 else "#DC2626"
+    result_text = "Nöbete atanabilir" if selectable else "Şu anda atanamaz"
+    result_bg = "#ECFDF3" if selectable else "#FEF2F2"
+    result_color = "#15803D" if selectable else "#B91C1C"
+
+    return dedent(
+        f"""
+        <!DOCTYPE html>
+        <html lang="tr">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            * {{ box-sizing: border-box; }}
+            body {{
+              margin: 0;
+              padding: 2px;
+              background: transparent;
+              font-family: Arial, Helvetica, sans-serif;
+              color: #101828;
+            }}
+          </style>
+        </head>
+        <body>
+        <div style="border:1px solid #D0D5DD;border-radius:18px;padding:18px;background:#FFFFFF;
+                    box-shadow:0 8px 22px rgba(16,24,40,.06);">
+      <div style="font-size:19px;font-weight:900;color:#123B6D;margin-bottom:4px;">
+        AYÇA Decision Engine
+      </div>
+      <div style="color:#667085;font-size:13px;margin-bottom:14px;">
+        {row.get("pharmacy_name", "Eczane")} için karar analizi
+      </div>
+
+      {rows_html}
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;">
+        <div>
+          <div style="font-size:12px;color:#667085;">Uygunluk Skoru</div>
+          <div style="font-size:34px;font-weight:900;color:{score_color};">{score:.0f}<span style="font-size:16px;">/100</span></div>
+        </div>
+        <div style="padding:10px 14px;border-radius:12px;background:{result_bg};
+                    color:{result_color};font-weight:900;">
+          {"✅" if selectable else "⛔"} {result_text}
+        </div>
+      </div>
+        </div>
+        </body>
+        </html>
+        """
+    ).strip()
+
+
+def selection_reason(row: pd.Series) -> str:
+    score = float(row.get("decision_score", 0) or 0)
+    gap = row.get("days_since_last_duty")
+    historical_load = float(row.get("historical_load", 0) or 0)
+    weekend_count = int(row.get("weekend_count", 0) or 0)
+    holiday_count = int(row.get("holiday_count", 0) or 0)
+
+    gap_text = "-" if gap is None or pd.isna(gap) else f"{int(gap)} gün ara"
+    return (
+        f"Uygunluk %{score:.0f} · {gap_text} · "
+        f"{historical_load:.1f} yük · "
+        f"{weekend_count} hafta sonu · {holiday_count} bayram"
+    )
+
+
+def build_selected_plan_cards(
+    active_groups: list[str],
+    selected_by_group: dict,
+    base_map_df: pd.DataFrame,
+    selection_meta_by_group: dict,
+) -> str:
+    cards = []
+
+    for group_name in active_groups:
+        pid = selected_by_group.get(group_name)
+
+        if pid is None:
+            cards.append(
+                f"""
+                <div class="selection-card empty">
+                  <div class="selection-group">{group_name} GRUBU</div>
+                  <div class="selection-name">Henüz seçilmedi</div>
+                  <div class="selection-meta">Haritadaki yeşil adaylardan birini seçin.</div>
+                </div>
+                """
+            )
+            continue
+
+        match = base_map_df.loc[base_map_df["pharmacy_id"] == pid]
+        if match.empty:
+            continue
+
+        row = match.iloc[0]
+        meta = selection_meta_by_group.get(group_name, {})
+        source = meta.get("source", "Mevcut seçim")
+
+        cards.append(
+            f"""
+            <div class="selection-card">
+              <div class="selection-group">{group_name} GRUBU</div>
+              <div class="selection-name">{row["pharmacy_name"]}</div>
+              <div class="selection-meta">{selection_reason(row)}</div>
+              <div class="selection-source">{source}</div>
+            </div>
+            """
+        )
+
+    return dedent(
+        f"""
+        <div class="selection-grid">
+          {''.join(cards)}
+        </div>
+        """
+    ).strip()
+
+
+def build_folium_map(
+    map_df: pd.DataFrame,
+    selected_df: pd.DataFrame,
+    min_distance_km: float,
+) -> folium.Map:
+    center = [float(map_df["lat"].mean()), float(map_df["lon"].mean())]
+    fmap = folium.Map(
+        location=center,
+        zoom_start=12,
+        tiles="CartoDB positron",
+        control_scale=True,
+    )
+
+    # Seçilen eczanelerin minimum mesafe çemberleri.
+    for row in selected_df.itertuples():
+        folium.Circle(
+            location=[row.lat, row.lon],
+            radius=min_distance_km * 1000,
+            color="#1D4ED8",
+            weight=2,
+            fill=True,
+            fill_color="#1D4ED8",
+            fill_opacity=0.08,
+            tooltip=f"{row.pharmacy_name} minimum mesafe alanı",
         ).add_to(fmap)
 
     # MarkerCluster kullanmadan doğrudan marker ekliyoruz; böylece her marker tıklanabilir.
