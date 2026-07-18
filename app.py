@@ -337,6 +337,183 @@ st.markdown(
             .performance-grid{grid-template-columns:1fr 1fr;}
         }
 
+
+        .showcase-shell {
+            border-radius: 26px;
+            padding: 22px;
+            margin: 8px 0 20px 0;
+            background:
+                radial-gradient(circle at 90% 0%, rgba(59,130,246,.16), transparent 31%),
+                linear-gradient(145deg, #F8FBFF 0%, #FFFFFF 55%, #F4F8FF 100%);
+            border: 1px solid #DCE6F3;
+            box-shadow: 0 18px 50px rgba(18,59,109,.10);
+        }
+        .engine-panel {
+            position: relative;
+            overflow: hidden;
+            border-radius: 24px;
+            padding: 26px;
+            min-height: 245px;
+            color: white;
+            background:
+                radial-gradient(circle at 85% 10%, rgba(56,189,248,.30), transparent 32%),
+                radial-gradient(circle at 12% 95%, rgba(139,92,246,.26), transparent 30%),
+                linear-gradient(135deg, #06182D 0%, #123B6D 55%, #2563EB 100%);
+            box-shadow: 0 18px 40px rgba(18,59,109,.24);
+        }
+        .engine-panel:after {
+            content:"";
+            position:absolute;
+            inset:-40%;
+            background: conic-gradient(
+                from 180deg,
+                transparent,
+                rgba(255,255,255,.08),
+                transparent 30%
+            );
+            animation: ayca-spin 9s linear infinite;
+        }
+        @keyframes ayca-spin { to { transform: rotate(360deg); } }
+        .engine-content { position:relative; z-index:2; }
+        .engine-eyebrow {
+            color:#BAE6FD; font-size:12px; font-weight:900;
+            letter-spacing:.12em; text-transform:uppercase;
+        }
+        .engine-title {
+            font-size:31px; font-weight:950; line-height:1.08;
+            margin:8px 0 8px 0;
+        }
+        .engine-subtitle {
+            color:#DCEBFA; font-size:14px; line-height:1.55; max-width:720px;
+        }
+        .engine-flow {
+            display:flex; gap:8px; flex-wrap:wrap; margin-top:18px;
+        }
+        .engine-node {
+            padding:8px 12px; border-radius:12px;
+            background:rgba(255,255,255,.13);
+            border:1px solid rgba(255,255,255,.20);
+            font-weight:900; backdrop-filter:blur(6px);
+        }
+        .engine-stat-row {
+            display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+            gap:10px; margin-top:18px;
+        }
+        .engine-stat {
+            background:rgba(255,255,255,.10);
+            border:1px solid rgba(255,255,255,.16);
+            border-radius:14px; padding:12px;
+        }
+        .engine-stat-value {font-size:23px;font-weight:950;}
+        .engine-stat-label {font-size:11px;color:#DCEBFA;margin-top:3px;}
+
+        .showcase-section-title {
+            font-size:22px; font-weight:950; color:#123B6D;
+            margin:4px 0 12px 0;
+        }
+        .showcase-section-sub {
+            color:#667085; font-size:13px; margin:-6px 0 15px 0;
+        }
+
+        .duty-grid {
+            display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+            gap:12px;
+        }
+        .duty-card {
+            position:relative; overflow:hidden;
+            border-radius:18px; padding:16px;
+            color:#FFFFFF; min-height:145px;
+            box-shadow:0 12px 28px rgba(16,24,40,.13);
+        }
+        .duty-card:after {
+            content:""; position:absolute; width:100px;height:100px;
+            right:-32px;top:-30px;border-radius:50%;
+            background:rgba(255,255,255,.14);
+        }
+        .duty-group {font-size:12px;font-weight:900;letter-spacing:.06em;}
+        .duty-name {font-size:20px;font-weight:950;margin-top:23px;line-height:1.15;}
+        .duty-score {font-size:12px;margin-top:10px;color:rgba(255,255,255,.88);}
+        .duty-status {
+            display:inline-flex;margin-top:9px;padding:5px 9px;border-radius:999px;
+            background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.25);
+            font-size:11px;font-weight:900;
+        }
+
+        .process-line {
+            display:grid;grid-template-columns:repeat(6,minmax(0,1fr));
+            gap:10px;position:relative;margin-top:12px;
+        }
+        .process-step {
+            text-align:center;padding:16px 9px;border-radius:18px;
+            background:#FFFFFF;border:1px solid #DCE6F3;
+            box-shadow:0 8px 20px rgba(16,24,40,.05);
+        }
+        .process-no {
+            width:30px;height:30px;border-radius:50%;margin:0 auto 8px auto;
+            display:flex;align-items:center;justify-content:center;
+            background:linear-gradient(135deg,#123B6D,#2563EB);
+            color:white;font-weight:950;
+        }
+        .process-icon {font-size:25px;margin-bottom:6px;}
+        .process-title {font-size:12px;font-weight:900;color:#123B6D;}
+        .process-text {font-size:10px;color:#667085;margin-top:5px;line-height:1.35;}
+
+        .capability-grid {
+            display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;
+        }
+        .capability-card {
+            position:relative;overflow:hidden;min-height:175px;
+            border-radius:20px;padding:18px;color:#FFFFFF;
+            box-shadow:0 12px 28px rgba(16,24,40,.12);
+        }
+        .capability-card:before {
+            content:"";position:absolute;inset:0;
+            background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(0,0,0,.10));
+        }
+        .capability-inner {position:relative;z-index:2;}
+        .capability-icon {
+            width:48px;height:48px;border-radius:15px;
+            display:flex;align-items:center;justify-content:center;
+            background:rgba(255,255,255,.17);font-size:25px;
+            border:1px solid rgba(255,255,255,.20);
+        }
+        .capability-title {font-size:17px;font-weight:950;margin-top:17px;}
+        .capability-text {font-size:12px;line-height:1.45;margin-top:7px;color:rgba(255,255,255,.88);}
+        .cap-blue {background:linear-gradient(135deg,#123B6D,#2563EB);}
+        .cap-purple {background:linear-gradient(135deg,#5B21B6,#8B5CF6);}
+        .cap-green {background:linear-gradient(135deg,#047857,#10B981);}
+        .cap-orange {background:linear-gradient(135deg,#C2410C,#F97316);}
+
+        .advantage-strip {
+            display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+            gap:10px;margin-top:12px;
+        }
+        .advantage-item {
+            border-radius:15px;padding:13px;background:#F8FBFF;
+            border:1px solid #DCE6F3;color:#123B6D;font-size:12px;font-weight:850;
+            display:flex;gap:8px;align-items:center;
+        }
+        .advantage-check {
+            width:24px;height:24px;border-radius:50%;
+            background:#DCFCE7;color:#15803D;display:flex;align-items:center;
+            justify-content:center;font-weight:950;flex:0 0 auto;
+        }
+
+        .story-expander-note {
+            padding:13px 15px;border-radius:14px;background:#F8FAFC;
+            border:1px solid #E4E7EC;color:#667085;font-size:13px;margin-bottom:8px;
+        }
+        @media(max-width:1000px){
+            .engine-stat-row,.duty-grid,.capability-grid{grid-template-columns:1fr 1fr;}
+            .process-line{grid-template-columns:repeat(3,1fr);}
+            .advantage-strip{grid-template-columns:1fr 1fr;}
+        }
+        @media(max-width:650px){
+            .engine-stat-row,.duty-grid,.capability-grid,.process-line,.advantage-strip{
+                grid-template-columns:1fr;
+            }
+        }
+
         .presentation-hero {
             position: relative;
             overflow: hidden;
@@ -1755,27 +1932,6 @@ tab_demo, tab_map, tab_groups, tab_plan = st.tabs(
 )
 
 with tab_demo:
-    st.markdown(
-        f"""
-        <div class="presentation-hero">
-          <div class="presentation-kicker">AYÇA NÖBET · İLK GÖRÜŞME SUNUM MODU</div>
-          <div class="presentation-title">{selected_city} için akıllı nöbet planlama simülasyonu</div>
-          <div class="presentation-subtitle">
-            100 örnek eczane üzerinden grup yapısını, aday elemesini, yakınlık ve
-            nöbet aralığı kontrollerini tek ekranda anlaşılır biçimde gösterir.
-          </div>
-          <div class="presentation-badges">
-            <span class="presentation-badge">🏥 100 Eczane</span>
-            <span class="presentation-badge">🧭 4 Bölge</span>
-            <span class="presentation-badge">⭕ 16 Alt Grup</span>
-            <span class="presentation-badge">⚖️ Adalet Odaklı</span>
-            <span class="presentation-badge">📍 Coğrafi Kontrol</span>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
     demo_candidates_by_group: dict[str, pd.DataFrame] = {}
     demo_selected_ids = list(st.session_state.selected_by_group.values())
 
@@ -1797,127 +1953,246 @@ with tab_demo:
         candidates_by_group=demo_candidates_by_group,
     )
 
-    top_left, top_center, top_right = st.columns([1.05, 1.8, 1.05], gap="large")
+    st.markdown(
+        f"""
+        <div class="presentation-hero">
+          <div class="presentation-kicker">AYÇA NÖBET · İLK GÖRÜŞME SUNUM MODU</div>
+          <div class="presentation-title">{selected_city} için akıllı nöbet planlama</div>
+          <div class="presentation-subtitle">
+            Grup yapısı, coğrafi dağılım, geçmiş nöbet yükü ve adalet kontrolleri
+            tek karar motorunda birleşir.
+          </div>
+          <div class="presentation-badges">
+            <span class="presentation-badge">🏥 100 Eczane</span>
+            <span class="presentation-badge">🧭 4 Bölge</span>
+            <span class="presentation-badge">⭕ 16 Alt Grup</span>
+            <span class="presentation-badge">📍 Canlı Mesafe Kontrolü</span>
+            <span class="presentation-badge">⚖️ Adalet Odaklı</span>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    with top_left:
-        st.markdown(
-            """
-            <div class="demo-stage">
-              <div class="demo-stage-title">Sistem Hazırlanıyor</div>
-              <div class="demo-check"><span class="demo-check-icon">✓</span>Eczaneler yüklendi</div>
-              <div class="demo-check"><span class="demo-check-icon">✓</span>Gruplar oluşturuldu</div>
-              <div class="demo-check"><span class="demo-check-icon">✓</span>Geçmiş nöbetler analiz edildi</div>
-              <div class="demo-check"><span class="demo-check-icon">✓</span>Yakınlık haritası hazırlandı</div>
-              <div class="demo-check"><span class="demo-check-icon">✓</span>Kurallar etkinleştirildi</div>
+    st.markdown('<div class="showcase-shell">', unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="engine-panel">
+          <div class="engine-content">
+            <div class="engine-eyebrow">AYÇA KARAR MOTORU</div>
+            <div class="engine-title">Nöbet dağılımı hazırlanıyor</div>
+            <div class="engine-subtitle">
+              Aktif grup kombinasyonu içindeki adaylar; minimum mesafe, nöbet aralığı,
+              geçmiş yük, hafta sonu ve bayram dengesi üzerinden birlikte değerlendirilir.
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.metric("Toplam eczane", demo_summary["total_pharmacies"])
-        st.metric("Toplam grup", demo_summary["total_groups"])
-
-    with top_center:
-        st.markdown(
-            '<div class="demo-stage"><div class="demo-stage-title">AYÇA Karar Motoru</div>',
-            unsafe_allow_html=True,
-        )
-        st.caption("Bugünün aktif grup kombinasyonu")
-        st.markdown(
-            " ".join(
-                f'<span class="group-chip" style="background:{group_colors[g[0]]};">{g}</span>'
-                for g in active_groups
-            ),
-            unsafe_allow_html=True,
-        )
-        st.progress(
-            min(
-                1.0,
-                demo_summary["selected_count"]
-                / max(1, demo_summary["active_group_count"]),
-            ),
-            text=(
-                f'{demo_summary["total_candidates"]} aday değerlendirildi · '
-                f'{demo_summary["rule_checks"]} kural kontrolü'
-            ),
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.subheader("Grup Bazında Karar Hikâyesi")
-        story_columns = st.columns(2)
-        for story_index, demo_group in enumerate(active_groups):
-            story = build_group_story(
-                group_name=demo_group,
-                candidates=demo_candidates_by_group[demo_group],
-                selected_pharmacy_id=st.session_state.selected_by_group.get(
-                    demo_group
-                ),
-            )
-            with story_columns[story_index % 2]:
-                with st.container(border=True):
-                    st.markdown(f"#### {story['group']} Grubu")
-                    st.caption(
-                        f"{story['candidate_count']} aday · "
-                        f"{story['blocked_count']} elendi · "
-                        f"{story['selectable_count']} uygun"
-                    )
-                    st.markdown(
-                        f"**Önerilen:** {story['selected_name']} "
-                        f"— %{story['selected_score']:.0f}"
-                    )
-                    for reason_item in story["reasons"][:3]:
-                        st.write(
-                            f"❌ {reason_item['pharmacy_name']}: "
-                            f"{reason_item['reason']}"
-                        )
-
-    with top_right:
-        st.markdown(
-            f"""
-            <div class="demo-stage">
-              <div class="demo-stage-title">Bugün Uygulanan Kurallar</div>
-              <div class="demo-rule"><span>Minimum nöbet aralığı</span><b>{min_gap_days} gün</b></div>
-              <div class="demo-rule"><span>Minimum mesafe</span><b>{min_distance_km:.1f} km</b></div>
-              <div class="demo-rule"><span>Grup dengesi</span><b>Aktif</b></div>
-              <div class="demo-rule"><span>Hafta sonu dengesi</span><b>Aktif</b></div>
-              <div class="demo-rule"><span>Bayram dengesi</span><b>Aktif</b></div>
-              <div class="demo-rule"><span>Eşlenik kontrolü</span><b>Aktif</b></div>
+            <div class="engine-flow">
+              {''.join(f'<span class="engine-node">{group}</span>' for group in active_groups)}
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.markdown("##### AYÇA Değerlendirmesi")
-        st.markdown(
-            f'<div class="demo-score">{demo_summary["fairness_score"]:.1f}'
-            '<span style="font-size:18px;color:#667085;">/100</span></div>',
-            unsafe_allow_html=True,
-        )
-        st.caption("Gösterim amaçlı adalet ve uygunluk skoru")
+            <div class="engine-stat-row">
+              <div class="engine-stat">
+                <div class="engine-stat-value">{demo_summary["total_candidates"]}</div>
+                <div class="engine-stat-label">Aday incelendi</div>
+              </div>
+              <div class="engine-stat">
+                <div class="engine-stat-value">{demo_summary["rule_checks"]}</div>
+                <div class="engine-stat-label">Kural kontrolü</div>
+              </div>
+              <div class="engine-stat">
+                <div class="engine-stat-value">{demo_summary["estimated_combinations"]:,}</div>
+                <div class="engine-stat-label">Olası kombinasyon</div>
+              </div>
+              <div class="engine-stat">
+                <div class="engine-stat-value">{demo_summary["fairness_score"]:.1f}</div>
+                <div class="engine-stat-label">Adalet skoru</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.progress(
+        min(
+            1.0,
+            demo_summary["selected_count"]
+            / max(1, demo_summary["active_group_count"]),
+        ),
+        text=(
+            f'{demo_summary["selected_count"]}/{demo_summary["active_group_count"]} '
+            "nöbetçi belirlendi"
+        ),
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("### Günün Nöbetçileri")
-    result_cols = st.columns(len(active_groups))
-    for result_col, demo_group in zip(result_cols, active_groups):
+    st.markdown(
+        '<div class="showcase-section-title">Bugünün Nöbetçileri</div>'
+        '<div class="showcase-section-sub">'
+        'Her aktif gruptan seçilen eczaneler tek bakışta gösterilir.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    duty_colors = {
+        "A": "linear-gradient(135deg,#2563EB,#38BDF8)",
+        "B": "linear-gradient(135deg,#059669,#34D399)",
+        "C": "linear-gradient(135deg,#EA580C,#FB923C)",
+        "D": "linear-gradient(135deg,#7C3AED,#A78BFA)",
+    }
+
+    duty_cards = []
+    for demo_group in active_groups:
         selected_pid = st.session_state.selected_by_group.get(demo_group)
         selected_name = "Henüz seçilmedi"
+        selected_score = 0.0
+
         if selected_pid is not None:
-            selected_match = pharmacies.loc[
-                pharmacies["pharmacy_id"].astype(int) == int(selected_pid)
+            selected_match = demo_candidates_by_group[demo_group].loc[
+                demo_candidates_by_group[demo_group]["pharmacy_id"].astype(int)
+                == int(selected_pid)
             ]
             if not selected_match.empty:
-                selected_name = str(
-                    selected_match.iloc[0]["pharmacy_name"]
-                )
+                selected_name = str(selected_match.iloc[0]["pharmacy_name"])
+                selected_score = float(selected_match.iloc[0]["decision_score"])
 
-        with result_col:
-            with st.container(border=True):
-                st.markdown(f"**{demo_group} Grubu**")
-                st.markdown(f"### {selected_name}")
-                st.caption(
-                    "Seçildi"
-                    if selected_pid is not None
-                    else "Simülasyonu tamamlayın"
-                )
+        duty_cards.append(
+            f"""
+            <div class="duty-card" style="background:{duty_colors[demo_group[0]]};">
+              <div class="duty-group">{demo_group} GRUBU</div>
+              <div class="duty-name">{selected_name}</div>
+              <div class="duty-score">Uygunluk skoru %{selected_score:.0f}</div>
+              <div class="duty-status">
+                {'✓ Seçildi' if selected_pid is not None else '… Atama bekleniyor'}
+              </div>
+            </div>
+            """
+        )
 
-    st.markdown("### Performans Özeti")
+    st.markdown(
+        f'<div class="duty-grid">{"".join(duty_cards)}</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<br><div class="showcase-section-title">AYÇA Nasıl Çalışır?</div>'
+        '<div class="showcase-section-sub">'
+        'Karmaşık nöbet planlaması altı anlaşılır adımda tamamlanır.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <div class="process-line">
+          <div class="process-step">
+            <div class="process-no">1</div><div class="process-icon">📍</div>
+            <div class="process-title">Koordinatlar Okunur</div>
+            <div class="process-text">Eczanelerin coğrafi konumu sisteme aktarılır.</div>
+          </div>
+          <div class="process-step">
+            <div class="process-no">2</div><div class="process-icon">⭕</div>
+            <div class="process-title">Gruplar Oluşturulur</div>
+            <div class="process-text">Bölge ve eşlenik yapı dengeli biçimde modellenir.</div>
+          </div>
+          <div class="process-step">
+            <div class="process-no">3</div><div class="process-icon">📅</div>
+            <div class="process-title">Geçmiş İncelenir</div>
+            <div class="process-text">Son nöbet, hafta sonu ve bayram yükü okunur.</div>
+          </div>
+          <div class="process-step">
+            <div class="process-no">4</div><div class="process-icon">🧠</div>
+            <div class="process-title">Kurallar Uygulanır</div>
+            <div class="process-text">Mesafe, aralık ve grup şartları kontrol edilir.</div>
+          </div>
+          <div class="process-step">
+            <div class="process-no">5</div><div class="process-icon">⚖️</div>
+            <div class="process-title">Adalet Hesaplanır</div>
+            <div class="process-text">Görev yükü ve zor gün dağılımı puanlanır.</div>
+          </div>
+          <div class="process-step">
+            <div class="process-no">6</div><div class="process-icon">✅</div>
+            <div class="process-title">Plan Oluşturulur</div>
+            <div class="process-text">En uygun nöbetçiler açıklamalı biçimde sunulur.</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<br><div class="showcase-section-title">Platformun Gücü</div>'
+        '<div class="showcase-section-sub">'
+        'İlk görüşmede anlatılması gereken dört temel değer.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <div class="capability-grid">
+          <div class="capability-card cap-blue">
+            <div class="capability-inner">
+              <div class="capability-icon">🧠</div>
+              <div class="capability-title">Akıllı Karar Motoru</div>
+              <div class="capability-text">
+                Adayları tek tek değil, tüm kurallarla birlikte değerlendirir ve
+                en uygun dağılımı önerir.
+              </div>
+            </div>
+          </div>
+          <div class="capability-card cap-purple">
+            <div class="capability-inner">
+              <div class="capability-icon">🗺️</div>
+              <div class="capability-title">Coğrafi Analiz</div>
+              <div class="capability-text">
+                Bölge, grup, koordinat ve minimum mesafe kuralları harita üzerinde
+                canlı olarak kontrol edilir.
+              </div>
+            </div>
+          </div>
+          <div class="capability-card cap-green">
+            <div class="capability-inner">
+              <div class="capability-icon">⚖️</div>
+              <div class="capability-title">Adalet Motoru</div>
+              <div class="capability-text">
+                Geçmiş yük, hafta sonu, bayram ve nöbet aralığı dengesi aynı
+                puanlama yapısında birleşir.
+              </div>
+            </div>
+          </div>
+          <div class="capability-card cap-orange">
+            <div class="capability-inner">
+              <div class="capability-icon">⚡</div>
+              <div class="capability-title">Hızlı Yeniden Planlama</div>
+              <div class="capability-text">
+                Değişiklik veya mazeret durumunda plan, geçerli kurallar korunarak
+                saniyeler içinde yeniden oluşturulur.
+              </div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<br><div class="showcase-section-title">AYÇA Avantajları</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <div class="advantage-strip">
+          <div class="advantage-item"><span class="advantage-check">✓</span>Adil dağılım</div>
+          <div class="advantage-item"><span class="advantage-check">✓</span>Kuralların otomatik kontrolü</div>
+          <div class="advantage-item"><span class="advantage-check">✓</span>Saniyeler içinde plan</div>
+          <div class="advantage-item"><span class="advantage-check">✓</span>Tek tıkla yeniden hesaplama</div>
+          <div class="advantage-item"><span class="advantage-check">✓</span>Şehre özel uyarlama</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<br><div class="showcase-section-title">Performans Özeti</div>',
+        unsafe_allow_html=True,
+    )
     st.markdown(
         f"""
         <div class="performance-grid">
@@ -1946,73 +2221,41 @@ with tab_demo:
         unsafe_allow_html=True,
     )
 
-    st.markdown("### Genel Uygulanan Kurallar ve Fonksiyonlar")
-    st.markdown(
-        """
-        <div class="feature-grid">
-          <div class="feature-card">
-            <div class="feature-icon">🧩</div>
-            <div class="feature-title">Grup ve Eşlenik Rotasyonu</div>
-            <div class="feature-text">Her gün aktif olacak A, B, C ve D alt grupları dengeli rotasyonla belirlenir.</div>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">📍</div>
-            <div class="feature-title">Minimum Mesafe Kontrolü</div>
-            <div class="feature-text">Birlikte nöbetçi olacak eczanelerin birbirine aşırı yakın olması engellenir.</div>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">📆</div>
-            <div class="feature-title">Minimum Nöbet Aralığı</div>
-            <div class="feature-text">Bir eczanenin son nöbetinden itibaren gerekli dinlenme süresi otomatik kontrol edilir.</div>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">⚖️</div>
-            <div class="feature-title">Geçmiş Yük Dengesi</div>
-            <div class="feature-text">Toplam görev yükü yüksek eczaneler geri plana alınarak dağılım dengelenir.</div>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">🌙</div>
-            <div class="feature-title">Hafta Sonu ve Bayram Dengesi</div>
-            <div class="feature-text">Zor günlerin aynı eczanelerde birikmemesi için geçmiş dağılımlar puanlamaya katılır.</div>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">🧠</div>
-            <div class="feature-title">Karar ve Açıklama Motoru</div>
-            <div class="feature-text">Her aday için uygunluk skoru, elenme gerekçesi ve seçilme nedeni görünür biçimde sunulur.</div>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">🗺️</div>
-            <div class="feature-title">Harita ve Bölge Görselleştirmesi</div>
-            <div class="feature-text">Aktif gruplar, seçilebilir adaylar ve mesafe engelleri harita üzerinde canlı gösterilir.</div>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">🤖</div>
-            <div class="feature-title">Tek Gün Otomatik Tamamlama</div>
-            <div class="feature-text">Sistem, geçerli adaylar arasından en yüksek puanlı nöbetçileri otomatik önerir.</div>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">🗓️</div>
-            <div class="feature-title">Çok Günlük Planlama</div>
-            <div class="feature-text">Seçilen tarih aralığı için kuralları koruyarak ileri tarihli nöbet planı oluşturur.</div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    compare_left, compare_right = st.columns(2, gap="large")
-    with compare_left:
-        st.markdown("#### Klasik Planlama")
-        st.error(
-            "Manuel kontrol · saatler sürebilir · değişiklik yönetimi zor · "
-            "kuralların gözden kaçma riski vardır."
+    # Karar hikâyesi ilk akıştan çıkarıldı; yalnızca merak eden için detay olarak açılır.
+    with st.expander("🔍 Seçimlerin karar detaylarını incele"):
+        st.markdown(
+            '<div class="story-expander-note">'
+            'Bu bölüm teknik detay talep edildiğinde açılır. Her grubun aday sayısı, '
+            'elenme gerekçeleri ve önerilen eczanesi burada gösterilir.'
+            '</div>',
+            unsafe_allow_html=True,
         )
-    with compare_right:
-        st.markdown("#### AYÇA")
-        st.success(
-            "Tüm adaylar birlikte değerlendirilir · kurallar otomatik kontrol edilir · "
-            "değişiklikte plan yeniden hesaplanabilir."
-        )
+        story_columns = st.columns(2)
+        for story_index, demo_group in enumerate(active_groups):
+            story = build_group_story(
+                group_name=demo_group,
+                candidates=demo_candidates_by_group[demo_group],
+                selected_pharmacy_id=st.session_state.selected_by_group.get(
+                    demo_group
+                ),
+            )
+            with story_columns[story_index % 2]:
+                with st.container(border=True):
+                    st.markdown(f"#### {story['group']} Grubu")
+                    st.caption(
+                        f"{story['candidate_count']} aday · "
+                        f"{story['blocked_count']} elendi · "
+                        f"{story['selectable_count']} uygun"
+                    )
+                    st.markdown(
+                        f"**Önerilen:** {story['selected_name']} "
+                        f"— %{story['selected_score']:.0f}"
+                    )
+                    for reason_item in story["reasons"][:3]:
+                        st.write(
+                            f"❌ {reason_item['pharmacy_name']}: "
+                            f"{reason_item['reason']}"
+                        )
 
     st.info(
         f"Bu ekran {selected_city} için 100 sentetik eczane ile hazırlanmış "
