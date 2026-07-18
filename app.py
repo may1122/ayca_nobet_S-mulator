@@ -2055,20 +2055,23 @@ with tab_demo:
                 selected_score = float(selected_match.iloc[0]["decision_score"])
 
         duty_cards.append(
-            f"""
-            <div class="duty-card" style="background:{duty_colors[demo_group[0]]};">
-              <div class="duty-group">{demo_group} GRUBU</div>
-              <div class="duty-name">{selected_name}</div>
-              <div class="duty-score">Uygunluk skoru %{selected_score:.0f}</div>
-              <div class="duty-status">
-                {'✓ Seçildi' if selected_pid is not None else '… Atama bekleniyor'}
-              </div>
-            </div>
-            """
+            dedent(
+                f"""
+                <div class="duty-card" style="background:{duty_colors[demo_group[0]]};">
+                  <div class="duty-group">{demo_group} GRUBU</div>
+                  <div class="duty-name">{selected_name}</div>
+                  <div class="duty-score">Uygunluk skoru %{selected_score:.0f}</div>
+                  <div class="duty-status">
+                    {'✓ Seçildi' if selected_pid is not None else '… Atama bekleniyor'}
+                  </div>
+                </div>
+                """
+            ).strip()
         )
 
+    duty_cards_html = "".join(duty_cards)
     st.markdown(
-        f'<div class="duty-grid">{"".join(duty_cards)}</div>',
+        f'<div class="duty-grid">{duty_cards_html}</div>',
         unsafe_allow_html=True,
     )
 
