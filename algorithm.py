@@ -637,3 +637,149 @@ def build_group_svg(
 
     svg_parts.append("</svg>")
     return "".join(svg_parts)
+
+
+# ==========================================================
+# SUNUM / İLK TOPLANTI SİMÜLASYON METRİKLERİ
+# ==========================================================
+def build_simulation_summary(
+    pharmacies: pd.DataFrame,
+    active_groups: tuple[str, str, str, str] | list[str],
+    selected_by_group: dict[str, int],
+    candidates_by_group: dict[str, pd.DataFrame],
+) -> dict:
+    """
+    Mevcut karar motorunun çıktılarından, ilk toplantıda gösterilecek
+    sade ve anlaşılır performans özetini üretir.
+    """
+    total_candidates = 0
+    selectable_candidates = 0
+    blocked_candidates = 0
+    score_values: list[float] = []
+
+    for group_name in active_groups:
+        group_df = candidates_by_group.get(group_name, pd.DataFrame())
+        if group_df.empty:
+            continue
+
+        total_candidates += len(group_df)
+        selectable_candidates += int(group_df["selectable"].fillna(False).sum())
+        blocked_candidates += int((~group_df["selectable"].fillna(False)).sum())
+
+        valid_scores = pd.to_numeric(
+            group_df.loc[group_df["selectable"], "decision_score"],
+            errors="coerce",
+        ).dropna()
+        score_values.extend(valid_scores.astype(float).tolist())
+
+    selected_count = len(selected_by_group)
+    completed = selected_count == len(active_groups)
+
+    # Demo amacıyla gerçek aday sayısından türetilen, açıklanabilir metrikler.
+    rule_checks = total_candidates * 6
+    estimated_combinations = 1
+    for group_name in active_groups:
+        group_df = candidates_by_group.get(group_name, pd.DataFrame())
+        selectable_count = (
+            int(group_df["selectable"].fillna(False).sum())
+            if not group_df.empty
+            else 0
+        )
+        estimated_combinations *= max(1, selectable_count)
+
+    average_score = (
+        sum(score_values) / len(score_values)
+        if score_values
+        else 0.0
+    )
+
+    # Adalet skoru; uygunluk ortalaması ve atama tamamlama oranından oluşan
+    # sade bir sunum göstergesidir.
+    completion_ratio = selected_count / max(1, len(active_groups))
+    fairness_score = min(
+        100.0,
+        max(0.0, average_score * 0.75 + completion_ratio * 25),
+    )
+
+    estimated_seconds = round(
+        1.8 + total_candidates * 0.025 + len(active_groups) * 0.18,
+        1,
+    )
+
+    return {
+        "total_pharmacies": int(len(pharmacies)),
+        "total_groups": int(pharmacies["group"].nunique()),
+        "active_group_count": int(len(active_groups)),
+        "total_candidates": int(total_candidates),
+        "selectable_candidates": int(selectable_candidates),
+        "blocked_candidates": int(blocked_candidates),
+        "rule_checks": int(rule_checks),
+        "estimated_combinations": int(estimated_combinations),
+        "selected_count": int(selected_count),
+        "completed": bool(completed),
+        "average_candidate_score": round(float(average_score), 1),
+        "fairness_score": round(float(fairness_score), 1),
+        "estimated_seconds": float(estimated_seconds),
+    }
+
+
+def build_group_story(
+    group_name: str,
+    candidates: pd.DataFrame,
+    selected_pharmacy_id: int | None = None,
+) -> dict:
+    """
+    Bir aktif grubun toplantıda anlatılabilecek kısa karar hikâyesini üretir.
+    """
+    if candidates.empty:
+        return {
+            "group": group_name,
+            "candidate_count": 0,
+            "selectable_count": 0,
+            "blocked_count": 0,
+            "selected_name": "Aday bulunamadı",
+            "selected_score": 0.0,
+            "reasons": [],
+        }
+
+    selectable = candidates[candidates["selectable"]].sort_values(
+        "decision_score",
+        ascending=False,
+    )
+    blocked = candidates[~candidates["selectable"]].copy()
+
+    selected_row = pd.DataFrame()
+    if selected_pharmacy_id is not None:
+        selected_row = candidates.loc[
+            candidates["pharmacy_id"].astype(int)
+            == int(selected_pharmacy_id)
+        ]
+
+    if selected_row.empty and not selectable.empty:
+        selected_row = selectable.head(1)
+
+    if selected_row.empty:
+        selected_name = "Henüz seçilmedi"
+        selected_score = 0.0
+    else:
+        selected_name = str(selected_row.iloc[0]["pharmacy_name"])
+        selected_score = float(selected_row.iloc[0]["decision_score"])
+
+    reason_rows = []
+    for row in blocked.head(4).itertuples():
+        reason_rows.append(
+            {
+                "pharmacy_name": str(row.pharmacy_name),
+                "reason": str(row.reason),
+            }
+        )
+
+    return {
+        "group": group_name,
+        "candidate_count": int(len(candidates)),
+        "selectable_count": int(len(selectable)),
+        "blocked_count": int(len(blocked)),
+        "selected_name": selected_name,
+        "selected_score": round(selected_score, 1),
+        "reasons": reason_rows,
+    }
