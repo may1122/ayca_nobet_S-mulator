@@ -12,9 +12,23 @@ import pandas as pd
 # ==========================================================
 # DEMO COĞRAFİ YERLEŞİM SABİTLERİ
 # ==========================================================
-DEMO_LAYOUT_VERSION = 2
-DEMO_CENTER_LAT = 38.6742
-DEMO_CENTER_LON = 29.4058
+DEMO_LAYOUT_VERSION = 3
+
+CITY_CONFIG = {
+    "Uşak": {"lat": 38.6742, "lon": 29.4058},
+    "Giresun": {"lat": 40.9128, "lon": 38.3895},
+    "Erzurum": {"lat": 39.9043, "lon": 41.2679},
+    "Kahramanmaraş": {"lat": 37.5753, "lon": 36.9228},
+    "Sivas": {"lat": 39.7505, "lon": 37.0150},
+    "Tokat": {"lat": 40.3167, "lon": 36.5500},
+    "Amasya": {"lat": 40.6539, "lon": 35.8331},
+    "Ordu": {"lat": 40.9839, "lon": 37.8764},
+    "Trabzon": {"lat": 41.0015, "lon": 39.7178},
+    "Rize": {"lat": 41.0201, "lon": 40.5234},
+}
+
+DEMO_CENTER_LAT = CITY_CONFIG["Uşak"]["lat"]
+DEMO_CENTER_LON = CITY_CONFIG["Uşak"]["lon"]
 
 # Dört ana bölge tam 90 derecelik sektörlerdir.
 # A: kuzeybatı, B: güneybatı, C: güneydoğu, D: kuzeydoğu.
@@ -141,7 +155,12 @@ def _bearing_deg(
     return math.degrees(math.atan2(north_km, east_km)) % 360.0
 
 
-def pharmacy_layout_is_valid(pharmacies: pd.DataFrame) -> bool:
+def pharmacy_layout_is_valid(
+    pharmacies: pd.DataFrame,
+    center_lat: float = DEMO_CENTER_LAT,
+    center_lon: float = DEMO_CENTER_LON,
+    expected_total: int = 100,
+) -> bool:
     required_columns = {
         "pharmacy_id",
         "group",
@@ -154,7 +173,7 @@ def pharmacy_layout_is_valid(pharmacies: pd.DataFrame) -> bool:
     if not required_columns.issubset(pharmacies.columns):
         return False
 
-    if pharmacies.empty or len(pharmacies) != 96:
+    if pharmacies.empty or len(pharmacies) != expected_total:
         return False
 
     try:
@@ -173,7 +192,11 @@ def pharmacy_layout_is_valid(pharmacies: pd.DataFrame) -> bool:
     counts = pharmacies.groupby("group").size().to_dict()
     if set(counts) != expected_groups:
         return False
-    if any(int(counts[group_name]) != 6 for group_name in expected_groups):
+
+    # 100 eczane, 16 alt gruba mümkün olduğunca dengeli dağıtılır:
+    # 4 grupta 7, kalan 12 grupta 6 eczane.
+    group_sizes = sorted(int(value) for value in counts.values())
+    if group_sizes != ([6] * 12 + [7] * 4):
         return False
 
     tolerance_km = 0.04
@@ -190,8 +213,8 @@ def pharmacy_layout_is_valid(pharmacies: pd.DataFrame) -> bool:
             return False
 
         distance_km = haversine_km(
-            DEMO_CENTER_LAT,
-            DEMO_CENTER_LON,
+            center_lat,
+            center_lon,
             float(row.lat),
             float(row.lon),
         )
@@ -204,8 +227,8 @@ def pharmacy_layout_is_valid(pharmacies: pd.DataFrame) -> bool:
             return False
 
         bearing = _bearing_deg(
-            DEMO_CENTER_LAT,
-            DEMO_CENTER_LON,
+            center_lat,
+            center_lon,
             float(row.lat),
             float(row.lon),
         )
@@ -226,21 +249,35 @@ def pharmacy_layout_is_valid(pharmacies: pd.DataFrame) -> bool:
 
 def generate_pharmacies(
     seed: int = 42,
+    city_name: str = "Uşak",
     center_lat: float = DEMO_CENTER_LAT,
     center_lon: float = DEMO_CENTER_LON,
-    pharmacies_per_subgroup: int = 6,
+    total_pharmacies: int = 100,
 ) -> pd.DataFrame:
     """
-    96 eczanelik dengeli demo üretir:
-    4 ana bölge × 4 halka × 6 eczane.
+    100 eczanelik dengeli demo üretir.
 
-    Her eczane, ait olduğu sektörün ve halka kuşağının güvenli biçimde
-    içinde oluşturulur. Harita ve veri aynı geometrik sabitleri kullanır.
+    4 ana bölge × 4 halka = 16 alt grup kullanılır.
+    100 eczane bu gruplara mümkün olduğunca dengeli dağıtılır:
+    ilk 4 alt grupta 7, kalan 12 alt grupta 6 eczane.
     """
+    if total_pharmacies != 100:
+        raise ValueError("Bu sade demo yalnızca 100 eczane üzerinden çalışır.")
+
     rng = random.Random(seed)
     rows = []
     pharmacy_id = 1
     reference_date = pd.Timestamp("2026-08-01")
+
+    group_names = [
+        f"{region}{ring_no}"
+        for region in ("A", "B", "C", "D")
+        for ring_no in range(1, 5)
+    ]
+    group_counts = {
+        group_name: 7 if index < 4 else 6
+        for index, group_name in enumerate(group_names)
+    }
 
     for region in ("A", "B", "C", "D"):
         sector_start, sector_end = REGION_ANGLES[region]
@@ -249,20 +286,19 @@ def generate_pharmacies(
 
         for ring_no in range(1, 5):
             subgroup = f"{region}{ring_no}"
+            subgroup_count = group_counts[subgroup]
             inner_km, outer_km = RING_LIMITS_KM[ring_no]
             safe_inner = inner_km + RING_MARGIN_KM
             safe_outer = outer_km - RING_MARGIN_KM
 
-            for local_index in range(pharmacies_per_subgroup):
-                # Altı eczaneyi sektör boyunca düzenli, küçük sapmalarla dağıt.
-                fraction = (local_index + 1) / (pharmacies_per_subgroup + 1)
+            for local_index in range(subgroup_count):
+                fraction = (local_index + 1) / (subgroup_count + 1)
                 base_angle = usable_start + (usable_end - usable_start) * fraction
                 angle_deg = base_angle + rng.uniform(-1.8, 1.8)
 
-                # Aynı halkada üst üste binmeyi azaltmak için kontrollü uzaklık dağılımı.
                 radial_fraction = (
-                    ((local_index * 2) % pharmacies_per_subgroup) + 1
-                ) / (pharmacies_per_subgroup + 1)
+                    ((local_index * 2) % subgroup_count) + 1
+                ) / (subgroup_count + 1)
                 base_distance = safe_inner + (
                     safe_outer - safe_inner
                 ) * radial_fraction
@@ -287,7 +323,8 @@ def generate_pharmacies(
                 rows.append(
                     {
                         "pharmacy_id": pharmacy_id,
-                        "pharmacy_name": f"Eczane {pharmacy_id:03d}",
+                        "pharmacy_name": f"{city_name} Eczanesi {pharmacy_id:03d}",
+                        "city": city_name,
                         "region": region,
                         "ring": ring_no,
                         "group": subgroup,
@@ -308,10 +345,13 @@ def generate_pharmacies(
                 pharmacy_id += 1
 
     generated = pd.DataFrame(rows)
-    if not pharmacy_layout_is_valid(generated):
-        raise RuntimeError(
-            "Demo eczane yerleşimi doğrulamasını geçemedi."
-        )
+    if not pharmacy_layout_is_valid(
+        generated,
+        center_lat=center_lat,
+        center_lon=center_lon,
+        expected_total=total_pharmacies,
+    ):
+        raise RuntimeError("Demo eczane yerleşimi doğrulamasını geçemedi.")
     return generated
 
 
