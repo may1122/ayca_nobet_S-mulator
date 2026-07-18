@@ -860,13 +860,13 @@ def build_folium_map(
     south_west = destination_point(
         center_lat,
         center_lon,
-        outer_radius_km * 1.12,
+        outer_radius_km * 1.04,
         225,
     )
     north_east = destination_point(
         center_lat,
         center_lon,
-        outer_radius_km * 1.12,
+        outer_radius_km * 1.04,
         45,
     )
     fmap.fit_bounds([south_west, north_east])
