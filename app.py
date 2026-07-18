@@ -16,8 +16,7 @@ from streamlit_folium import st_folium
 
 from algorithm import (
     KOMB_ABC,
-    DEMO_CENTER_LAT,
-    DEMO_CENTER_LON,
+    CITY_CONFIG,
     REGION_ANGLES,
     RING_LIMITS_KM,
     SimulationState,
@@ -28,8 +27,6 @@ from algorithm import (
     status_palette,
     build_group_svg,
 )
-
-DEMO_CITY_NAME = "Uşak"
 
 st.set_page_config(
     page_title="AYÇA Nöbet | Grup Simülasyonu",
@@ -275,27 +272,50 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-DATA_PATH = Path(__file__).with_name("pharmacies.csv")
+def city_slug(city_name: str) -> str:
+    translation = str.maketrans(
+        {"ç": "c", "Ç": "c", "ğ": "g", "Ğ": "g", "ı": "i", "İ": "i",
+         "ö": "o", "Ö": "o", "ş": "s", "Ş": "s", "ü": "u", "Ü": "u"}
+    )
+    return city_name.translate(translation).lower().replace(" ", "_")
+
 
 @st.cache_data
-def load_pharmacies() -> pd.DataFrame:
+def load_pharmacies(
+    city_name: str,
+    center_lat: float,
+    center_lon: float,
+) -> pd.DataFrame:
     """
-    CSV yalnızca yeni çembersel yerleşim standardını karşılıyorsa kullanılır.
-    Eski veya hatalı koordinatlı CSV otomatik olarak yeniden oluşturulur.
+    Her şehir için 100 sentetik eczane oluşturur.
+    Şehir bazlı CSV kullanılır; eski veya hatalı dosya otomatik yenilenir.
     """
-    if DATA_PATH.exists():
+    data_path = Path(__file__).with_name(
+        f"pharmacies_{city_slug(city_name)}.csv"
+    )
+
+    if data_path.exists():
         try:
-            existing = pd.read_csv(DATA_PATH)
-            if pharmacy_layout_is_valid(existing):
+            existing = pd.read_csv(data_path)
+            if pharmacy_layout_is_valid(
+                existing,
+                center_lat=center_lat,
+                center_lon=center_lon,
+                expected_total=100,
+            ):
                 return existing
         except Exception:
             pass
 
-    generated = generate_pharmacies(seed=42)
-    generated.to_csv(DATA_PATH, index=False)
+    generated = generate_pharmacies(
+        seed=42,
+        city_name=city_name,
+        center_lat=center_lat,
+        center_lon=center_lon,
+        total_pharmacies=100,
+    )
+    generated.to_csv(data_path, index=False)
     return generated
-
-pharmacies = load_pharmacies()
 
 def pharmacy_group_for_id(pharmacy_id: int | None) -> str | None:
     if pharmacy_id is None:
@@ -683,9 +703,9 @@ def add_circular_group_grid(
     fmap: folium.Map,
     map_df: pd.DataFrame,
     active_groups: list[str],
+    center_lat: float,
+    center_lon: float,
 ) -> None:
-    center_lat = DEMO_CENTER_LAT
-    center_lon = DEMO_CENTER_LON
 
     region_colors = {
         "A": "#2563EB",
@@ -815,8 +835,10 @@ def build_folium_map(
     selected_df: pd.DataFrame,
     min_distance_km: float,
     active_groups: list[str],
+    center_lat: float,
+    center_lon: float,
 ) -> folium.Map:
-    center = [DEMO_CENTER_LAT, DEMO_CENTER_LON]
+    center = [center_lat, center_lon]
     fmap = folium.Map(
         location=center,
         zoom_start=13,
@@ -829,19 +851,21 @@ def build_folium_map(
         fmap=fmap,
         map_df=map_df,
         active_groups=active_groups,
+        center_lat=center_lat,
+        center_lon=center_lon,
     )
 
     # Harita görünümünü bütün çembersel yerleşimi kapsayacak şekilde sabitle.
     outer_radius_km = max(value[1] for value in RING_LIMITS_KM.values())
     south_west = destination_point(
-        DEMO_CENTER_LAT,
-        DEMO_CENTER_LON,
+        center_lat,
+        center_lon,
         outer_radius_km * 1.12,
         225,
     )
     north_east = destination_point(
-        DEMO_CENTER_LAT,
-        DEMO_CENTER_LON,
+        center_lat,
+        center_lon,
         outer_radius_km * 1.12,
         45,
     )
@@ -988,6 +1012,44 @@ def generate_multi_day_plan(
 
     return pd.DataFrame(schedule_rows), assignments_by_date
 
+
+# ==========================================================
+# ŞEHİR SEÇİMİ
+# ==========================================================
+
+if "selected_city" not in st.session_state:
+    st.session_state.selected_city = "Uşak"
+
+with st.sidebar:
+    st.header("Demo Şehri")
+    selected_city = st.selectbox(
+        "Şehir seçin",
+        options=list(CITY_CONFIG.keys()),
+        key="selected_city",
+    )
+
+city_center_lat = float(CITY_CONFIG[selected_city]["lat"])
+city_center_lon = float(CITY_CONFIG[selected_city]["lon"])
+
+if st.session_state.get("loaded_city") != selected_city:
+    st.session_state.loaded_city = selected_city
+
+    # Şehir değiştiğinde önceki şehrin seçim ve planları taşınmasın.
+    for key in [
+        "state",
+        "selected_by_group",
+        "selection_source_by_group",
+        "auto_plan_ready",
+        "auto_schedule_df",
+        "auto_assignments_by_date",
+    ]:
+        st.session_state.pop(key, None)
+
+pharmacies = load_pharmacies(
+    city_name=selected_city,
+    center_lat=city_center_lat,
+    center_lon=city_center_lon,
+)
 
 # ==========================================================
 # SESSION STATE VE PLANLAMA KONTROLLERİ
@@ -1475,8 +1537,8 @@ st.markdown(
     dedent(
         f"""
         <div class="product-header">
-          <div class="product-kicker">AYÇA NÖBET · UŞAK DEMOSU</div>
-          <div class="product-title">Uşak Nöbet Planlama Merkezi</div>
+          <div class="product-kicker">AYÇA NÖBET · {selected_city.upper()} DEMOSU</div>
+          <div class="product-title">{selected_city} Nöbet Planlama Merkezi</div>
           <div class="product-subtitle">
             Harita, grup yapısı ve oluşturulan plan tek tarih üzerinden
             canlı olarak senkronize edilir.
@@ -1634,6 +1696,8 @@ with tab_map:
             selected_df=selected_df,
             min_distance_km=min_distance_km,
             active_groups=active_groups,
+            center_lat=city_center_lat,
+            center_lon=city_center_lon,
         )
 
         map_event = st_folium(
@@ -1641,7 +1705,7 @@ with tab_map:
             height=610,
             use_container_width=True,
             returned_objects=["last_object_clicked_tooltip"],
-            key=f"ayca_map_{day_no}_{len(selected_ids)}",
+            key=f"ayca_map_{city_slug(selected_city)}_{day_no}_{len(selected_ids)}",
         )
 
         clicked_id = clicked_pharmacy_id(map_event)
@@ -2136,5 +2200,5 @@ with tab_plan:
         )
 
 st.caption(
-    "Not: Bu demo sentetik eczane ve koordinat verileri kullanır. Gerçek kurulumda oda tarafından sağlanan grup, koordinat ve geçmiş nöbet verileri sisteme aktarılır."
+    f"Not: {selected_city} demosu 100 sentetik eczane ve örnek koordinat kullanır. Gerçek kurulumda oda tarafından sağlanan grup, koordinat ve geçmiş nöbet verileri sisteme aktarılır."
 )
