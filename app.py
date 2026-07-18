@@ -337,6 +337,71 @@ st.markdown(
             .performance-grid{grid-template-columns:1fr 1fr;}
         }
 
+        .presentation-hero {
+            position: relative;
+            overflow: hidden;
+            border-radius: 24px;
+            padding: 26px 28px;
+            margin: 4px 0 18px 0;
+            color: white;
+            background:
+                radial-gradient(circle at 88% 18%, rgba(56,189,248,.28), transparent 28%),
+                radial-gradient(circle at 15% 100%, rgba(168,85,247,.22), transparent 30%),
+                linear-gradient(135deg, #071B33 0%, #123B6D 52%, #1D4ED8 100%);
+            box-shadow: 0 18px 45px rgba(18,59,109,.24);
+        }
+        .presentation-hero:after {
+            content:"";
+            position:absolute;
+            inset:0;
+            background-image: linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+            background-size: 28px 28px;
+            pointer-events:none;
+        }
+        .presentation-kicker {
+            position:relative; z-index:1;
+            font-size:12px; font-weight:900; letter-spacing:.12em;
+            text-transform:uppercase; color:#BAE6FD; margin-bottom:8px;
+        }
+        .presentation-title {
+            position:relative; z-index:1;
+            font-size:34px; font-weight:950; line-height:1.08; margin:0 0 8px 0;
+        }
+        .presentation-subtitle {
+            position:relative; z-index:1;
+            max-width:820px; color:#DCEBFA; font-size:15px; line-height:1.55;
+        }
+        .presentation-badges {
+            position:relative; z-index:1;
+            display:flex; gap:8px; flex-wrap:wrap; margin-top:16px;
+        }
+        .presentation-badge {
+            display:inline-flex; align-items:center; gap:6px;
+            padding:7px 10px; border-radius:999px;
+            background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18);
+            color:white; font-size:12px; font-weight:800;
+            backdrop-filter: blur(8px);
+        }
+        .calendar-panel {
+            border:1px solid #DCE3EE; border-radius:18px; padding:14px 16px;
+            background:linear-gradient(135deg,#FFFFFF,#F8FBFF);
+            box-shadow:0 8px 22px rgba(16,24,40,.05); margin-bottom:14px;
+        }
+        .feature-grid {
+            display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px;
+            margin:10px 0 18px 0;
+        }
+        .feature-card {
+            border:1px solid #E4E7EC; border-radius:16px; padding:15px;
+            background:#FFFFFF; min-height:132px;
+            box-shadow:0 6px 18px rgba(16,24,40,.045);
+        }
+        .feature-icon {font-size:21px; margin-bottom:8px;}
+        .feature-title {font-weight:900; color:#123B6D; margin-bottom:6px;}
+        .feature-text {font-size:12px; color:#667085; line-height:1.55;}
+        @media(max-width:900px){.feature-grid{grid-template-columns:1fr;}}
+
         .timeline-caption {
             color: #667085;
             font-size: 12px;
@@ -1463,19 +1528,22 @@ if planning_mode == "Otomatik Çok Günlük Plan":
             st.session_state.auto_view_date
         )
 
-        st.markdown("#### Otomatik Plan Günleri")
         st.markdown(
-            '<div class="timeline-caption">'
-            'Bir güne tıklayın; üst özet, harita, grup yapısı ve plan birlikte değişir.'
-            '</div>',
+            '<div class="calendar-panel">'
+            '<div style="font-weight:900;color:#123B6D;font-size:15px;">Plan Tarihi Seçimi</div>'
+            '<div style="color:#667085;font-size:12px;margin-top:3px;">'
+            'Takvimden bir gün seçildiğinde özet, harita, grup yapısı ve plan birlikte güncellenir.'
+            '</div></div>',
             unsafe_allow_html=True,
         )
 
-        previous_col, date_label_col, next_col = st.columns([1, 3, 1])
+        calendar_prev, calendar_picker_col, calendar_next = st.columns(
+            [0.8, 2.4, 0.8], gap="medium"
+        )
 
-        with previous_col:
+        with calendar_prev:
             if st.button(
-                "← Önceki Gün",
+                "← Önceki",
                 key="auto_previous_date_button",
                 use_container_width=True,
                 disabled=auto_date_index == 0,
@@ -1487,14 +1555,26 @@ if planning_mode == "Otomatik Çok Günlük Plan":
                 st.session_state.plan_calendar_picker = new_date
                 st.rerun()
 
-        with date_label_col:
-            st.markdown(
-                f"### {st.session_state.auto_view_date.strftime('%d.%m.%Y')}"
+        with calendar_picker_col:
+            picked_auto_date = st.date_input(
+                "Otomatik plan tarihini seçin",
+                value=st.session_state.auto_view_date,
+                min_value=available_auto_dates[0],
+                max_value=available_auto_dates[-1],
+                format="DD.MM.YYYY",
+                key="auto_calendar_picker",
+                label_visibility="collapsed",
             )
+            if picked_auto_date != st.session_state.auto_view_date:
+                st.session_state.auto_view_date = picked_auto_date
+                st.session_state.canonical_current_date = picked_auto_date
+                st.session_state.plan_calendar_date = picked_auto_date
+                st.session_state.plan_calendar_picker = picked_auto_date
+                st.rerun()
 
-        with next_col:
+        with calendar_next:
             if st.button(
-                "Sonraki Gün →",
+                "Sonraki →",
                 key="auto_next_date_button",
                 use_container_width=True,
                 disabled=auto_date_index >= len(available_auto_dates) - 1,
@@ -1506,38 +1586,14 @@ if planning_mode == "Otomatik Çok Günlük Plan":
                 st.session_state.plan_calendar_picker = new_date
                 st.rerun()
 
-        # Tarihleri yatay bir zaman çizgisi gibi göster.
-        for row_start in range(0, len(available_auto_dates), 7):
-            row_dates = available_auto_dates[row_start:row_start + 7]
-            row_columns = st.columns(len(row_dates))
-
-            for column, timeline_date in zip(row_columns, row_dates):
-                is_selected = (
-                    timeline_date == st.session_state.auto_view_date
-                )
-                button_label = (
-                    f"● {timeline_date.day}"
-                    if is_selected
-                    else str(timeline_date.day)
-                )
-
-                with column:
-                    if st.button(
-                        button_label,
-                        key=f"auto_timeline_{timeline_date.isoformat()}",
-                        use_container_width=True,
-                        type="primary" if is_selected else "secondary",
-                        help=timeline_date.strftime("%d.%m.%Y"),
-                    ):
-                        st.session_state.auto_view_date = timeline_date
-                        st.session_state.canonical_current_date = timeline_date
-                        st.session_state.plan_calendar_date = timeline_date
-                        st.session_state.plan_calendar_picker = timeline_date
-                        st.rerun()
+        st.caption(
+            f"Plan aralığı: {available_auto_dates[0].strftime('%d.%m.%Y')} – "
+            f"{available_auto_dates[-1].strftime('%d.%m.%Y')} · "
+            f"Seçili gün: {st.session_state.auto_view_date.strftime('%d.%m.%Y')}"
+        )
 
         # canonical_current_date; takvim, özet, harita ve planın
-        # ortak tarihidir. Otomatik gün seçicisi yalnızca kullanıcı
-        # onu değiştirdiğinde bu tarihi günceller.
+        # ortak tarihidir. Takvim seçimi bu tarihi günceller.
         current_date = st.session_state.canonical_current_date
         day_no = (current_date - ROTATION_START_DATE).days + 1
         active_groups = group_for_day(
@@ -1699,6 +1755,27 @@ tab_demo, tab_map, tab_groups, tab_plan = st.tabs(
 )
 
 with tab_demo:
+    st.markdown(
+        f"""
+        <div class="presentation-hero">
+          <div class="presentation-kicker">AYÇA NÖBET · İLK GÖRÜŞME SUNUM MODU</div>
+          <div class="presentation-title">{selected_city} için akıllı nöbet planlama simülasyonu</div>
+          <div class="presentation-subtitle">
+            100 örnek eczane üzerinden grup yapısını, aday elemesini, yakınlık ve
+            nöbet aralığı kontrollerini tek ekranda anlaşılır biçimde gösterir.
+          </div>
+          <div class="presentation-badges">
+            <span class="presentation-badge">🏥 100 Eczane</span>
+            <span class="presentation-badge">🧭 4 Bölge</span>
+            <span class="presentation-badge">⭕ 16 Alt Grup</span>
+            <span class="presentation-badge">⚖️ Adalet Odaklı</span>
+            <span class="presentation-badge">📍 Coğrafi Kontrol</span>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     demo_candidates_by_group: dict[str, pd.DataFrame] = {}
     demo_selected_ids = list(st.session_state.selected_by_group.values())
 
@@ -1863,6 +1940,60 @@ with tab_demo:
           <div class="performance-card">
             <div class="performance-value">{demo_summary["estimated_seconds"]:.1f} sn</div>
             <div class="performance-label">Tahmini çalışma süresi</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("### Genel Uygulanan Kurallar ve Fonksiyonlar")
+    st.markdown(
+        """
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="feature-icon">🧩</div>
+            <div class="feature-title">Grup ve Eşlenik Rotasyonu</div>
+            <div class="feature-text">Her gün aktif olacak A, B, C ve D alt grupları dengeli rotasyonla belirlenir.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📍</div>
+            <div class="feature-title">Minimum Mesafe Kontrolü</div>
+            <div class="feature-text">Birlikte nöbetçi olacak eczanelerin birbirine aşırı yakın olması engellenir.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📆</div>
+            <div class="feature-title">Minimum Nöbet Aralığı</div>
+            <div class="feature-text">Bir eczanenin son nöbetinden itibaren gerekli dinlenme süresi otomatik kontrol edilir.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">⚖️</div>
+            <div class="feature-title">Geçmiş Yük Dengesi</div>
+            <div class="feature-text">Toplam görev yükü yüksek eczaneler geri plana alınarak dağılım dengelenir.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🌙</div>
+            <div class="feature-title">Hafta Sonu ve Bayram Dengesi</div>
+            <div class="feature-text">Zor günlerin aynı eczanelerde birikmemesi için geçmiş dağılımlar puanlamaya katılır.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🧠</div>
+            <div class="feature-title">Karar ve Açıklama Motoru</div>
+            <div class="feature-text">Her aday için uygunluk skoru, elenme gerekçesi ve seçilme nedeni görünür biçimde sunulur.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🗺️</div>
+            <div class="feature-title">Harita ve Bölge Görselleştirmesi</div>
+            <div class="feature-text">Aktif gruplar, seçilebilir adaylar ve mesafe engelleri harita üzerinde canlı gösterilir.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <div class="feature-title">Tek Gün Otomatik Tamamlama</div>
+            <div class="feature-text">Sistem, geçerli adaylar arasından en yüksek puanlı nöbetçileri otomatik önerir.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🗓️</div>
+            <div class="feature-title">Çok Günlük Planlama</div>
+            <div class="feature-text">Seçilen tarih aralığı için kuralları koruyarak ileri tarihli nöbet planı oluşturur.</div>
           </div>
         </div>
         """,
