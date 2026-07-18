@@ -12,19 +12,19 @@ import pandas as pd
 # ==========================================================
 # DEMO COĞRAFİ YERLEŞİM SABİTLERİ
 # ==========================================================
-DEMO_LAYOUT_VERSION = 3
+DEMO_LAYOUT_VERSION = 4
 
 CITY_CONFIG = {
     "Uşak": {"lat": 38.6742, "lon": 29.4058},
-    "Giresun": {"lat": 40.9128, "lon": 38.3895},
+    "Giresun": {"lat": 40.8875, "lon": 38.3895},
     "Erzurum": {"lat": 39.9043, "lon": 41.2679},
     "Kahramanmaraş": {"lat": 37.5753, "lon": 36.9228},
     "Sivas": {"lat": 39.7505, "lon": 37.0150},
     "Tokat": {"lat": 40.3167, "lon": 36.5500},
     "Amasya": {"lat": 40.6539, "lon": 35.8331},
-    "Ordu": {"lat": 40.9839, "lon": 37.8764},
-    "Trabzon": {"lat": 41.0015, "lon": 39.7178},
-    "Rize": {"lat": 41.0201, "lon": 40.5234},
+    "Ordu": {"lat": 40.9565, "lon": 37.8764},
+    "Trabzon": {"lat": 40.9740, "lon": 39.7178},
+    "Rize": {"lat": 40.9920, "lon": 40.5234},
 }
 
 DEMO_CENTER_LAT = CITY_CONFIG["Uşak"]["lat"]
@@ -323,7 +323,7 @@ def generate_pharmacies(
                 rows.append(
                     {
                         "pharmacy_id": pharmacy_id,
-                        "pharmacy_name": f"{city_name} Eczanesi {pharmacy_id:03d}",
+                        "pharmacy_name": f"Eczane {pharmacy_id}",
                         "city": city_name,
                         "region": region,
                         "ring": ring_no,
