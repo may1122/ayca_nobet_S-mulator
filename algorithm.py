@@ -1,3 +1,6 @@
+# AYÇA NÖBET ALGORİTMASI - v15.2
+# app.py v15.2 ile uyumlu algoritma sürümü.
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
