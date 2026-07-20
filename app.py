@@ -11,7 +11,6 @@ from __future__ import annotations
 from datetime import date, timedelta
 from pathlib import Path
 from textwrap import dedent
-import base64
 import math
 import re
 
@@ -662,31 +661,18 @@ def render_pdf(pdf_path: Path) -> None:
         return
 
     pdf_bytes = pdf_path.read_bytes()
-    pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
-    components.html(
-        f"""
-        <!doctype html>
-        <html lang="tr">
-        <head>
-          <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <style>
-            html, body {{ margin:0; padding:0; background:#F8FAFC; }}
-            iframe {{
-              width:100%; height:900px; border:1px solid #DCE3EE;
-              border-radius:16px; background:white;
-            }}
-          </style>
-        </head>
-        <body>
-          <iframe src="data:application/pdf;base64,{pdf_base64}"></iframe>
-        </body>
-        </html>
-        """,
-        height=920,
-        scrolling=False,
-    )
+    if not hasattr(st, "pdf"):
+        st.error(
+            "PDF görüntüleyici kullanılamıyor. requirements.txt dosyasına "
+            "streamlit[pdf] ekleyip uygulamayı yeniden başlatın."
+        )
+    else:
+        st.pdf(
+            pdf_bytes,
+            height=900,
+            key=f"pdf_viewer_{pdf_path.stem}",
+        )
 
     st.download_button(
         "⬇️ Sunumu PDF olarak indir",
@@ -694,6 +680,7 @@ def render_pdf(pdf_path: Path) -> None:
         file_name=pdf_path.name,
         mime="application/pdf",
         use_container_width=True,
+        key=f"download_{pdf_path.stem}",
     )
 
 
