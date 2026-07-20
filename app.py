@@ -629,6 +629,30 @@ st.markdown(
         .mode-banner strong {color:#1D4ED8;}
         @media(max-width:900px){.executive-strip{grid-template-columns:1fr 1fr}.saas-topbar{align-items:flex-start}}
         @media(max-width:650px){.executive-strip{grid-template-columns:1fr}.saas-topbar{display:block}.saas-actions{justify-content:flex-start;margin-top:10px}}
+
+        /* Premium açık SaaS tema */
+        .stApp { background:#F6F8FC; color:#1B2B48; }
+        section[data-testid="stSidebar"] { background:#FFFFFF !important; border-right:1px solid #E8EDF5 !important; }
+        section[data-testid="stSidebar"] * { color:#1B2B48 !important; }
+        section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] .stCaption { color:#6B7280 !important; }
+        section[data-testid="stSidebar"] [data-baseweb="select"] > div,
+        section[data-testid="stSidebar"] input { background:#FFFFFF !important; border-color:#DDE5F0 !important; color:#1B2B48 !important; }
+        .saas-logo { background:#2F6BFF !important; box-shadow:none !important; }
+        .executive-main, .engine-panel, .presentation-hero, .capability-card, .duty-card {
+            background:#FFFFFF !important; color:#1B2B48 !important; border:1px solid #E8EDF5 !important; box-shadow:0 6px 18px rgba(16,24,40,.05) !important;
+        }
+        .engine-panel:after, .presentation-hero:after, .capability-card:before, .duty-card:after { display:none !important; }
+        .engine-eyebrow, .engine-subtitle, .engine-stat-label, .presentation-kicker,
+        .presentation-subtitle, .capability-text, .duty-score { color:#6B7280 !important; }
+        .engine-node, .engine-stat, .presentation-badge, .duty-status {
+            background:#F7F9FC !important; border:1px solid #E8EDF5 !important; color:#1B2B48 !important;
+        }
+        .product-header, .showcase-shell, .demo-stage, .calendar-panel {
+            background:#FFFFFF !important; border:1px solid #E8EDF5 !important; box-shadow:0 6px 18px rgba(16,24,40,.05) !important;
+        }
+        .product-title, .showcase-section-title, .feature-title, .plan-name, .summary-title,
+        .performance-value, .process-title, .saas-brand-title { color:#1B2B48 !important; }
+        .group-chip { color:#FFFFFF !important; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1394,8 +1418,6 @@ if "pharmacy_count" not in st.session_state:
     st.session_state.pharmacy_count = int(
         CITY_CONFIG[st.session_state.selected_city].get("default_pharmacy_count", 100)
     )
-if "demo_level" not in st.session_state:
-    st.session_state.demo_level = "Gerçekçi Demo"
 if "demo_start_date" not in st.session_state:
     st.session_state.demo_start_date = date(2026, 8, 1)
 
@@ -1408,7 +1430,9 @@ def sync_city_defaults() -> None:
 
 
 with st.sidebar:
-    st.header("Yeni Demo Oluştur")
+    st.markdown("### AYÇA Nöbet")
+    st.caption("Planlama ve karar destek platformu")
+    st.markdown("#### Simülasyon Parametreleri")
     selected_city = st.selectbox(
         "📍 Şehir",
         options=list(CITY_CONFIG.keys()),
@@ -1416,23 +1440,21 @@ with st.sidebar:
         on_change=sync_city_defaults,
     )
 
+    pharmacy_options = [75, 100, 125, 150, 175, 200, 250, 300]
+    current_count = int(st.session_state.pharmacy_count)
+    if current_count not in pharmacy_options:
+        pharmacy_options = sorted(set(pharmacy_options + [current_count]))
     total_pharmacies = int(
-        st.number_input(
+        st.selectbox(
             "👥 Toplam eczane sayısı",
-            min_value=16,
-            max_value=500,
-            step=1,
+            options=pharmacy_options,
+            index=pharmacy_options.index(current_count),
             key="pharmacy_count",
-            help="75, 100, 154 gibi istediğiniz toplam sayıyı girebilirsiniz.",
+            help="Seçilen sayıya göre 16 alt grubun eczane dağılımı otomatik dengelenir.",
         )
     )
 
-    demo_level = st.selectbox(
-        "🎛️ Demo seviyesi",
-        options=["Hızlı Demo", "Gerçekçi Demo"],
-        key="demo_level",
-        help="Hızlı Demo sade ve seri gösterim; Gerçekçi Demo kümeli yerleşim ve ayrıntılı karar görünümü kullanır.",
-    )
+    demo_level = "Gerçekçi Demo"
 
     demo_start_date = st.date_input(
         "📅 Başlangıç tarihi",
@@ -1440,12 +1462,7 @@ with st.sidebar:
         format="DD.MM.YYYY",
     )
 
-    presentation_mode = st.toggle(
-        "Başkan modu",
-        value=True,
-        key="presentation_mode",
-        help="İlk toplantı için sade ve etkileyici sunum ekranını öne çıkarır.",
-    )
+    presentation_mode = True
 
     profile = CITY_CONFIG[selected_city]
     st.markdown(
@@ -1459,8 +1476,7 @@ with st.sidebar:
             🧩 <b>16</b> alt grup<br>
             🏥 Günlük <b>4</b> nöbetçi<br>
             🗺️ <b>{profile.get('layout', 'Dairesel')}</b><br>
-            📌 {profile.get('profile', 'Demo profili')}<br>
-            🎛️ <b>{demo_level}</b>
+            📌 {profile.get('profile', 'Şehir planlama profili')}
           </div>
         </div>
         """,
@@ -1470,7 +1486,7 @@ with st.sidebar:
 city_center_lat = float(CITY_CONFIG[selected_city]["lat"])
 city_center_lon = float(CITY_CONFIG[selected_city]["lon"])
 ROTATION_START_DATE = demo_start_date
-profile_key = f"{selected_city}|{total_pharmacies}|{demo_level}|{ROTATION_START_DATE.isoformat()}"
+profile_key = f"{selected_city}|{total_pharmacies}|{ROTATION_START_DATE.isoformat()}"
 
 if st.session_state.get("loaded_profile") != profile_key:
     st.session_state.loaded_profile = profile_key
@@ -1970,11 +1986,7 @@ mode_text = (
     else "Otomatik çok günlük plan"
 )
 
-mode_description = (
-    "Sadeleştirilmiş sunum, daha az harita etiketi ve hızlı karar akışı"
-    if demo_level == "Hızlı Demo"
-    else "Kümeli şehir yerleşimi, ayrıntılı skorlar ve tam karar analizi"
-)
+mode_description = "Coğrafi denge, geçmiş nöbet yükü ve adalet kontrolleri canlı olarak uygulanır."
 
 st.markdown(
     f"""
@@ -1982,57 +1994,25 @@ st.markdown(
       <div class="saas-brand">
         <div class="saas-logo">A</div>
         <div>
-          <div class="saas-brand-title">AYÇA Nöbet Cloud</div>
-          <div class="saas-brand-sub">Akıllı planlama ve karar destek platformu</div>
+          <div class="saas-brand-title">AYÇA Nöbet</div>
+          <div class="saas-brand-sub">Planlama ve karar destek platformu</div>
         </div>
       </div>
       <div class="saas-actions">
         <span class="saas-badge">{selected_city}</span>
-        <span class="saas-badge">{demo_level}</span>
-        <span class="saas-badge">{total_pharmacies} eczane</span>
-        <span class="saas-badge live">● Sistem aktif</span>
+        <span class="saas-badge">{total_pharmacies} Eczane</span>
+        <span class="saas-badge">16 Alt Grup</span>
+        <span class="saas-badge">{date_text}</span>
+        <span class="saas-badge live">● Sistem Aktif</span>
       </div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-if presentation_mode:
-    st.markdown(
-        f"""
-        <div class="executive-strip">
-          <div class="executive-main">
-            <div class="x-title">Başkan Yönetici Görünümü</div>
-            <div class="x-sub">Teknik ayrıntılar yerine karar, denge ve operasyon sonucu öne çıkarılır.</div>
-          </div>
-          <div class="executive-kpi"><div class="x-label">ŞEHİR PROFİLİ</div><div class="x-value">{selected_city}</div></div>
-          <div class="executive-kpi"><div class="x-label">AKTİF GRUP</div><div class="x-value">4 / 16</div></div>
-          <div class="executive-kpi"><div class="x-label">VERİ SETİ</div><div class="x-value">{total_pharmacies}</div></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-st.markdown(
-    f'<div class="mode-banner"><strong>{demo_level}</strong> · {mode_description}</div>',
-    unsafe_allow_html=True,
-)
-
-header_kicker = (
-    "YÖNETİCİ SUNUMU · KARAR DESTEK MERKEZİ"
-    if presentation_mode
-    else f"AYÇA NÖBET · {selected_city.upper()} OPERASYON PANELİ"
-)
-header_title = (
-    f"{selected_city} Ecza Odası Yönetici Özeti"
-    if presentation_mode
-    else f"{selected_city} Nöbet Planlama Merkezi"
-)
-header_subtitle = (
-    "Adalet, kapsama, coğrafi denge ve operasyon sonucu tek ekranda izlenir."
-    if presentation_mode
-    else "Grup mantığını, aday elemesini ve nöbet dağılımını canlı olarak yönetin."
-)
+header_kicker = "AYÇA NÖBET · KARAR DESTEK PLATFORMU"
+header_title = f"{selected_city} Ecza Odası Nöbet Planlama Merkezi"
+header_subtitle = "Coğrafi yakınlık, geçmiş nöbet yükü, grup dengesi ve adalet algoritması tek ekranda yönetilir."
 
 st.markdown(
     dedent(
@@ -2103,12 +2083,13 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab_demo, tab_map, tab_groups, tab_plan = st.tabs(
+tab_demo, tab_calendar, tab_map, tab_groups, tab_plan = st.tabs(
     [
-        "🎬 Sunum Simülasyonu",
-        "🗺️ Eczane Haritası",
-        "⭕ Grup Yapısı",
-        "📅 Oluşturulan Plan",
+        "Yönetici Özeti",
+        "Nöbet Takvimi",
+        "Eczane Haritası",
+        "Grup Yapısı",
+        "Oluşturulan Plan",
     ]
 )
 
@@ -2137,7 +2118,7 @@ with tab_demo:
     st.markdown(
         f"""
         <div class="presentation-hero">
-          <div class="presentation-kicker">AYÇA NÖBET · İLK GÖRÜŞME SUNUM MODU</div>
+          <div class="presentation-kicker">AYÇA NÖBET · YÖNETİCİ KARAR MERKEZİ</div>
           <div class="presentation-title">{selected_city} için akıllı nöbet planlama</div>
           <div class="presentation-subtitle">
             Grup yapısı, coğrafi dağılım, geçmiş nöbet yükü ve adalet kontrolleri
@@ -2149,7 +2130,6 @@ with tab_demo:
             <span class="presentation-badge">⭕ 16 Alt Grup</span>
             <span class="presentation-badge">📍 Canlı Mesafe Kontrolü</span>
             <span class="presentation-badge">⚖️ Adalet Odaklı</span>
-            <span class="presentation-badge">🎛️ {demo_level}</span>
           </div>
         </div>
         """,
@@ -2447,6 +2427,52 @@ with tab_demo:
         "ilk görüşme simülasyonudur. Gerçek kurulumda odanın gerçek eczaneleri, "
         "koordinatları, geçmiş nöbetleri ve yerel kuralları kullanılır."
     )
+
+with tab_calendar:
+    st.markdown("### 15 Günlük Nöbet Rotasyonu")
+    st.caption("Bir tarih seçildiğinde aktif alt gruplar ve o güne ait nöbet yapısı görüntülenir.")
+
+    calendar_days = 15
+    calendar_rows = []
+    for offset in range(calendar_days):
+        calendar_date = ROTATION_START_DATE + timedelta(days=offset)
+        groups = group_for_day(offset % len(KOMB_ABC))
+        calendar_rows.append({
+            "Tarih": calendar_date.strftime("%d.%m.%Y"),
+            "Gün": weekday_names[calendar_date.weekday()],
+            "Aktif Alt Gruplar": "  ·  ".join(groups),
+            "Nöbetçi Sayısı": len(groups),
+        })
+
+    calendar_df = pd.DataFrame(calendar_rows)
+    st.dataframe(
+        calendar_df,
+        use_container_width=True,
+        hide_index=True,
+        height=560,
+        column_config={
+            "Tarih": st.column_config.TextColumn("Tarih", width="small"),
+            "Gün": st.column_config.TextColumn("Gün", width="small"),
+            "Aktif Alt Gruplar": st.column_config.TextColumn("Aktif Alt Gruplar", width="large"),
+            "Nöbetçi Sayısı": st.column_config.NumberColumn("Nöbetçi", format="%d"),
+        },
+    )
+
+    selected_calendar_date = st.date_input(
+        "Takvimde görüntülenecek gün",
+        value=current_date,
+        min_value=ROTATION_START_DATE,
+        max_value=ROTATION_START_DATE + timedelta(days=calendar_days - 1),
+        format="DD.MM.YYYY",
+        key="duty_calendar_selected_date",
+    )
+    selected_offset = (selected_calendar_date - ROTATION_START_DATE).days
+    selected_groups = group_for_day(selected_offset % len(KOMB_ABC))
+    st.info(
+        f"{selected_calendar_date.strftime('%d.%m.%Y')} tarihinde aktif alt gruplar: "
+        + " · ".join(selected_groups)
+    )
+
 
 with tab_map:
     st.markdown(
