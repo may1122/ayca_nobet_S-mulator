@@ -12,19 +12,19 @@ import pandas as pd
 # ==========================================================
 # DEMO COĞRAFİ YERLEŞİM SABİTLERİ
 # ==========================================================
-DEMO_LAYOUT_VERSION = 4
+DEMO_LAYOUT_VERSION = 6
 
 CITY_CONFIG = {
-    "Uşak": {"lat": 38.6742, "lon": 29.4058},
-    "Giresun": {"lat": 40.8875, "lon": 38.3895},
-    "Erzurum": {"lat": 39.9043, "lon": 41.2679},
-    "Kahramanmaraş": {"lat": 37.5753, "lon": 36.9228},
-    "Sivas": {"lat": 39.7505, "lon": 37.0150},
-    "Tokat": {"lat": 40.3167, "lon": 36.5500},
-    "Amasya": {"lat": 40.6539, "lon": 35.8331},
-    "Ordu": {"lat": 40.9565, "lon": 37.8764},
-    "Trabzon": {"lat": 40.9740, "lon": 39.7178},
-    "Rize": {"lat": 40.9920, "lon": 40.5234},
+    "Uşak": {"lat": 38.6742, "lon": 29.4058, "default_pharmacy_count": 75, "profile": "İç Ege", "layout": "Dairesel"},
+    "Giresun": {"lat": 40.8875, "lon": 38.3895, "default_pharmacy_count": 100, "profile": "Karadeniz kıyı", "layout": "Kıyı koridoru"},
+    "Erzurum": {"lat": 39.9043, "lon": 41.2679, "default_pharmacy_count": 154, "profile": "Geniş coğrafya", "layout": "Dairesel"},
+    "Kahramanmaraş": {"lat": 37.5753, "lon": 36.9228, "default_pharmacy_count": 210, "profile": "Büyükşehir", "layout": "Dairesel"},
+    "Sivas": {"lat": 39.7505, "lon": 37.0150, "default_pharmacy_count": 120, "profile": "İç Anadolu", "layout": "Dairesel"},
+    "Tokat": {"lat": 40.3167, "lon": 36.5500, "default_pharmacy_count": 90, "profile": "Orta Karadeniz", "layout": "Dairesel"},
+    "Amasya": {"lat": 40.6539, "lon": 35.8331, "default_pharmacy_count": 75, "profile": "Vadi yerleşimi", "layout": "Dairesel"},
+    "Ordu": {"lat": 40.9565, "lon": 37.8764, "default_pharmacy_count": 110, "profile": "Karadeniz kıyı", "layout": "Dairesel"},
+    "Trabzon": {"lat": 40.9740, "lon": 39.7178, "default_pharmacy_count": 154, "profile": "Karadeniz kıyı", "layout": "Dairesel"},
+    "Rize": {"lat": 40.9920, "lon": 40.5234, "default_pharmacy_count": 85, "profile": "Karadeniz kıyı", "layout": "Dairesel"},
 }
 
 DEMO_CENTER_LAT = CITY_CONFIG["Uşak"]["lat"]
@@ -38,6 +38,29 @@ REGION_ANGLES = {
     "C": (270.0, 360.0),
     "D": (0.0, 90.0),
 }
+
+
+# Kıyı şehirlerinde tam dairesel yerleşim denize taşabilir.
+# Giresun için gruplar batı-güney-doğu yönündeki kara koridoruna yayılır.
+CITY_REGION_ANGLES = {
+    "Giresun": {
+        "A": (165.0, 210.0),
+        "B": (210.0, 255.0),
+        "C": (255.0, 300.0),
+        "D": (300.0, 345.0),
+    },
+}
+
+
+def region_angles_for_city(city_name: str) -> dict[str, tuple[float, float]]:
+    """Şehre özel sektör açılarını döndürür."""
+    normalized = str(city_name or "").strip().casefold()
+
+    for configured_city, angles in CITY_REGION_ANGLES.items():
+        if configured_city.casefold() == normalized:
+            return angles
+
+    return REGION_ANGLES
 
 # Haritada çizilen ve veri üretiminde kullanılan ortak halka sınırları.
 RING_LIMITS_KM = {
@@ -160,6 +183,7 @@ def pharmacy_layout_is_valid(
     center_lat: float = DEMO_CENTER_LAT,
     center_lon: float = DEMO_CENTER_LON,
     expected_total: int = 100,
+    city_name: str | None = None,
 ) -> bool:
     required_columns = {
         "pharmacy_id",
@@ -193,14 +217,24 @@ def pharmacy_layout_is_valid(
     if set(counts) != expected_groups:
         return False
 
-    # 100 eczane, 16 alt gruba mümkün olduğunca dengeli dağıtılır:
-    # 4 grupta 7, kalan 12 grupta 6 eczane.
+    # Her toplam sayı 16 alt gruba mümkün olduğunca dengeli dağıtılır.
+    base_count, remainder = divmod(int(expected_total), len(expected_groups))
+    expected_sizes = sorted(
+        [base_count + 1] * remainder
+        + [base_count] * (len(expected_groups) - remainder)
+    )
     group_sizes = sorted(int(value) for value in counts.values())
-    if group_sizes != ([6] * 12 + [7] * 4):
+    if group_sizes != expected_sizes:
         return False
 
     tolerance_km = 0.04
     tolerance_deg = 0.8
+
+    resolved_city = city_name
+    if resolved_city is None and "city" in pharmacies.columns and not pharmacies.empty:
+        resolved_city = str(pharmacies.iloc[0]["city"])
+
+    region_angles = region_angles_for_city(resolved_city or "")
 
     for row in pharmacies.itertuples():
         region = str(row.region)
@@ -209,7 +243,7 @@ def pharmacy_layout_is_valid(
 
         if group_name != f"{region}{ring_no}":
             return False
-        if region not in REGION_ANGLES or ring_no not in RING_LIMITS_KM:
+        if region not in region_angles or ring_no not in RING_LIMITS_KM:
             return False
 
         distance_km = haversine_km(
@@ -232,9 +266,9 @@ def pharmacy_layout_is_valid(
             float(row.lat),
             float(row.lon),
         )
-        start_angle, end_angle = REGION_ANGLES[region]
+        start_angle, end_angle = region_angles[region]
 
-        if region == "C" and bearing < 270:
+        if end_angle > 360 and bearing < start_angle:
             bearing += 360
 
         if not (
@@ -255,14 +289,12 @@ def generate_pharmacies(
     total_pharmacies: int = 100,
 ) -> pd.DataFrame:
     """
-    100 eczanelik dengeli demo üretir.
-
-    4 ana bölge × 4 halka = 16 alt grup kullanılır.
-    100 eczane bu gruplara mümkün olduğunca dengeli dağıtılır:
-    ilk 4 alt grupta 7, kalan 12 alt grupta 6 eczane.
+    İstenen toplam eczane sayısını 4 ana bölge × 4 halka = 16 alt gruba
+    mümkün olduğunca dengeli dağıtarak sentetik demo üretir.
     """
-    if total_pharmacies != 100:
-        raise ValueError("Bu sade demo yalnızca 100 eczane üzerinden çalışır.")
+    total_pharmacies = int(total_pharmacies)
+    if total_pharmacies < 16:
+        raise ValueError("Toplam eczane sayısı en az 16 olmalıdır.")
 
     rng = random.Random(seed)
     rows = []
@@ -274,13 +306,16 @@ def generate_pharmacies(
         for region in ("A", "B", "C", "D")
         for ring_no in range(1, 5)
     ]
+    base_count, remainder = divmod(total_pharmacies, len(group_names))
     group_counts = {
-        group_name: 7 if index < 4 else 6
+        group_name: base_count + (1 if index < remainder else 0)
         for index, group_name in enumerate(group_names)
     }
 
+    region_angles = region_angles_for_city(city_name)
+
     for region in ("A", "B", "C", "D"):
-        sector_start, sector_end = REGION_ANGLES[region]
+        sector_start, sector_end = region_angles[region]
         usable_start = sector_start + SECTOR_MARGIN_DEG
         usable_end = sector_end - SECTOR_MARGIN_DEG
 
@@ -350,6 +385,7 @@ def generate_pharmacies(
         center_lat=center_lat,
         center_lon=center_lon,
         expected_total=total_pharmacies,
+        city_name=city_name,
     ):
         raise RuntimeError("Demo eczane yerleşimi doğrulamasını geçemedi.")
     return generated
