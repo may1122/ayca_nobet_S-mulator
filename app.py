@@ -2746,17 +2746,9 @@ with tab_plan:
                 clear_current_selections()
             st.rerun()
 
-    with nav_calendar:
-        st.date_input(
-            "Tarih seçin",
-            min_value=nav_min_date,
-            max_value=nav_max_date,
-            format="DD.MM.YYYY",
-            key="plan_calendar_picker",
-            on_change=sync_plan_calendar_date,
-            label_visibility="collapsed",
-        )
-
+    # ÖNEMLİ: Tarih widget'ı en son oluşturulur. Böylece butonlar,
+    # plan_calendar_picker anahtarını widget oluşturulmadan önce günceller.
+    # Aksi halde StreamlitAPIException oluşur.
     with nav_today:
         today_target = min(nav_max_date, max(nav_min_date, date.today()))
         if st.button(
@@ -2793,6 +2785,17 @@ with tab_plan:
             else:
                 clear_current_selections()
             st.rerun()
+
+    with nav_calendar:
+        st.date_input(
+            "Tarih seçin",
+            min_value=nav_min_date,
+            max_value=nav_max_date,
+            format="DD.MM.YYYY",
+            key="plan_calendar_picker",
+            on_change=sync_plan_calendar_date,
+            label_visibility="collapsed",
+        )
 
     # Güncel tarih, buton veya takvim değişiminden sonra tekrar alınır.
     plan_display_date = st.session_state.canonical_current_date
