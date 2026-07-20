@@ -1,8 +1,8 @@
-# AYÇA NÖBET SİMÜLATÖRÜ - v16.1
+# AYÇA NÖBET SİMÜLATÖRÜ - v16.2
 # Tarih navigasyonu ve takvim senkronizasyonu düzeltildi.
 
 # ==========================================================
-# AYÇA NÖBET SİMÜLATÖRÜ — v16.1
+# AYÇA NÖBET SİMÜLATÖRÜ — v16.2
 # Simülatör üstünde kompakt Sunumlar ve Dashboard butonları
 # ==========================================================
 
@@ -724,24 +724,6 @@ if "platform_page" not in st.session_state:
 if st.session_state.platform_page == "presentations":
     render_presentations_page()
     st.stop()
-
-# Simülatör ekranının üzerinde yalnızca iki kompakt buton.
-quick_left, quick_mid, quick_right = st.columns([1.15, 1.2, 5.65], gap="small")
-with quick_left:
-    st.button(
-        "📽️ Sunumlar",
-        use_container_width=True,
-        key="simulator_presentations_button",
-        on_click=set_platform_page,
-        args=("presentations",),
-    )
-with quick_mid:
-    st.link_button(
-        "📊 Dashboard ↗",
-        DASHBOARD_URL,
-        use_container_width=True,
-    )
-
 
 def city_slug(city_name: str) -> str:
     translation = str.maketrans(
@@ -2047,6 +2029,25 @@ mode_text = (
     if planning_mode == "Tek Gün / Manuel Seçim"
     else "Otomatik çok günlük plan"
 )
+
+# Simülatör başlığının hemen üzerinde görünür hızlı erişim butonları.
+quick_spacer, quick_presentation, quick_dashboard = st.columns(
+    [5.6, 1.2, 1.2], gap="small"
+)
+with quick_presentation:
+    st.button(
+        "📽️ Sunumlar",
+        use_container_width=True,
+        key="simulator_presentations_button",
+        on_click=set_platform_page,
+        args=("presentations",),
+    )
+with quick_dashboard:
+    st.link_button(
+        "📊 Dashboard ↗",
+        DASHBOARD_URL,
+        use_container_width=True,
+    )
 
 st.markdown(
     dedent(
