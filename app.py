@@ -19,7 +19,6 @@ from algorithm import (
     CITY_CONFIG,
     REGION_ANGLES,
     RING_LIMITS_KM,
-    region_angles_for_city,
     SimulationState,
     eligible_candidates,
     generate_pharmacies,
@@ -620,7 +619,6 @@ def load_pharmacies(
                 center_lat=center_lat,
                 center_lon=center_lon,
                 expected_total=100,
-                city_name=city_name,
             ):
                 return existing
         except Exception:
@@ -1024,7 +1022,6 @@ def add_circular_group_grid(
     active_groups: list[str],
     center_lat: float,
     center_lon: float,
-    city_name: str,
 ) -> None:
 
     region_colors = {
@@ -1034,7 +1031,7 @@ def add_circular_group_grid(
         "D": "#7C3AED",
     }
 
-    region_angles = region_angles_for_city(city_name)
+    region_angles = REGION_ANGLES
     ring_limits = RING_LIMITS_KM
 
     active_set = set(active_groups)
@@ -1157,7 +1154,6 @@ def build_folium_map(
     active_groups: list[str],
     center_lat: float,
     center_lon: float,
-    city_name: str,
 ) -> folium.Map:
     center = [center_lat, center_lon]
     fmap = folium.Map(
@@ -1174,7 +1170,6 @@ def build_folium_map(
         active_groups=active_groups,
         center_lat=center_lat,
         center_lon=center_lon,
-        city_name=city_name,
     )
 
     # Harita görünümünü bütün çembersel yerleşimi kapsayacak şekilde sabitle.
@@ -2358,7 +2353,6 @@ with tab_map:
             active_groups=active_groups,
             center_lat=city_center_lat,
             center_lon=city_center_lon,
-            city_name=selected_city,
         )
 
         map_event = st_folium(
