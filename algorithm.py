@@ -12,7 +12,7 @@ import pandas as pd
 # ==========================================================
 # DEMO COĞRAFİ YERLEŞİM SABİTLERİ
 # ==========================================================
-DEMO_LAYOUT_VERSION = 4
+DEMO_LAYOUT_VERSION = 5
 
 CITY_CONFIG = {
     "Uşak": {"lat": 38.6742, "lon": 29.4058},
@@ -38,6 +38,22 @@ REGION_ANGLES = {
     "C": (270.0, 360.0),
     "D": (0.0, 90.0),
 }
+
+# Kıyı şehirlerinde tam dairesel yerleşim denize taşabilir.
+# Giresun için dört bölgeyi batı-güney-doğu kara koridoruna yayıyoruz.
+CITY_REGION_ANGLES = {
+    "Giresun": {
+        "A": (165.0, 210.0),
+        "B": (210.0, 255.0),
+        "C": (255.0, 300.0),
+        "D": (300.0, 345.0),
+    },
+}
+
+
+def region_angles_for_city(city_name: str) -> dict[str, tuple[float, float]]:
+    """Şehre özel sektör açılarını döndürür."""
+    return CITY_REGION_ANGLES.get(city_name, REGION_ANGLES)
 
 # Haritada çizilen ve veri üretiminde kullanılan ortak halka sınırları.
 RING_LIMITS_KM = {
@@ -160,6 +176,7 @@ def pharmacy_layout_is_valid(
     center_lat: float = DEMO_CENTER_LAT,
     center_lon: float = DEMO_CENTER_LON,
     expected_total: int = 100,
+    city_name: str | None = None,
 ) -> bool:
     required_columns = {
         "pharmacy_id",
@@ -201,6 +218,10 @@ def pharmacy_layout_is_valid(
 
     tolerance_km = 0.04
     tolerance_deg = 0.8
+    resolved_city = city_name
+    if resolved_city is None and "city" in pharmacies.columns and not pharmacies.empty:
+        resolved_city = str(pharmacies.iloc[0]["city"])
+    region_angles = region_angles_for_city(resolved_city or "")
 
     for row in pharmacies.itertuples():
         region = str(row.region)
@@ -209,7 +230,7 @@ def pharmacy_layout_is_valid(
 
         if group_name != f"{region}{ring_no}":
             return False
-        if region not in REGION_ANGLES or ring_no not in RING_LIMITS_KM:
+        if region not in region_angles or ring_no not in RING_LIMITS_KM:
             return False
 
         distance_km = haversine_km(
@@ -232,9 +253,9 @@ def pharmacy_layout_is_valid(
             float(row.lat),
             float(row.lon),
         )
-        start_angle, end_angle = REGION_ANGLES[region]
+        start_angle, end_angle = region_angles[region]
 
-        if region == "C" and bearing < 270:
+        if end_angle > 360 and bearing < start_angle:
             bearing += 360
 
         if not (
@@ -279,8 +300,10 @@ def generate_pharmacies(
         for index, group_name in enumerate(group_names)
     }
 
+    region_angles = region_angles_for_city(city_name)
+
     for region in ("A", "B", "C", "D"):
-        sector_start, sector_end = REGION_ANGLES[region]
+        sector_start, sector_end = region_angles[region]
         usable_start = sector_start + SECTOR_MARGIN_DEG
         usable_end = sector_end - SECTOR_MARGIN_DEG
 
@@ -350,6 +373,7 @@ def generate_pharmacies(
         center_lat=center_lat,
         center_lon=center_lon,
         expected_total=total_pharmacies,
+        city_name=city_name,
     ):
         raise RuntimeError("Demo eczane yerleşimi doğrulamasını geçemedi.")
     return generated
