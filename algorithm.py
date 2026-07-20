@@ -1,6 +1,11 @@
 # AYÇA NÖBET ALGORİTMASI - v15.2
 # app.py v15.2 ile uyumlu algoritma sürümü.
 
+# ==========================================================
+# AYÇA ALGORITHM — v15.3
+# Değişken şehir eczane sayısı desteği
+# ==========================================================
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -15,19 +20,21 @@ import pandas as pd
 # ==========================================================
 # DEMO COĞRAFİ YERLEŞİM SABİTLERİ
 # ==========================================================
-DEMO_LAYOUT_VERSION = 5
+DEMO_LAYOUT_VERSION = 6
 
+# Şehirlerin demo eczane sayıları ayrı tutulur.
+# Değerler sunum/demo ölçeğidir; gerçek veri geldiğinde doğrudan güncellenebilir.
 CITY_CONFIG = {
-    "Uşak": {"lat": 38.6742, "lon": 29.4058},
-    "Giresun": {"lat": 40.8740, "lon": 38.3895},
-    "Erzurum": {"lat": 39.9043, "lon": 41.2679},
-    "Kahramanmaraş": {"lat": 37.5753, "lon": 36.9228},
-    "Sivas": {"lat": 39.7505, "lon": 37.0150},
-    "Tokat": {"lat": 40.3167, "lon": 36.5500},
-    "Amasya": {"lat": 40.6539, "lon": 35.8331},
-    "Ordu": {"lat": 40.9565, "lon": 37.8764},
-    "Trabzon": {"lat": 40.9740, "lon": 39.7178},
-    "Rize": {"lat": 40.9920, "lon": 40.5234},
+    "Uşak": {"lat": 38.6742, "lon": 29.4058, "pharmacy_count": 100},
+    "Giresun": {"lat": 40.8740, "lon": 38.3895, "pharmacy_count": 80},
+    "Erzurum": {"lat": 39.9043, "lon": 41.2679, "pharmacy_count": 112},
+    "Kahramanmaraş": {"lat": 37.5753, "lon": 36.9228, "pharmacy_count": 200},
+    "Sivas": {"lat": 39.7505, "lon": 37.0150, "pharmacy_count": 120},
+    "Tokat": {"lat": 40.3167, "lon": 36.5500, "pharmacy_count": 80},
+    "Amasya": {"lat": 40.6539, "lon": 35.8331, "pharmacy_count": 80},
+    "Ordu": {"lat": 40.9565, "lon": 37.8764, "pharmacy_count": 100},
+    "Trabzon": {"lat": 40.9740, "lon": 39.7178, "pharmacy_count": 160},
+    "Rize": {"lat": 40.9920, "lon": 40.5234, "pharmacy_count": 80},
 }
 
 DEMO_CENTER_LAT = CITY_CONFIG["Uşak"]["lat"]
@@ -196,10 +203,15 @@ def pharmacy_layout_is_valid(
     if set(counts) != expected_groups:
         return False
 
-    # 100 eczane, 16 alt gruba mümkün olduğunca dengeli dağıtılır:
-    # 4 grupta 7, kalan 12 grupta 6 eczane.
+    # Eczaneler 16 alt gruba mümkün olduğunca dengeli dağıtılır.
+    # Grup büyüklükleri arasındaki fark en fazla 1 olabilir.
+    base_count, remainder = divmod(expected_total, len(expected_groups))
+    expected_group_sizes = sorted(
+        [base_count + 1] * remainder
+        + [base_count] * (len(expected_groups) - remainder)
+    )
     group_sizes = sorted(int(value) for value in counts.values())
-    if group_sizes != ([6] * 12 + [7] * 4):
+    if group_sizes != expected_group_sizes:
         return False
 
     tolerance_km = 0.04
@@ -258,16 +270,18 @@ def generate_pharmacies(
     total_pharmacies: int = 100,
 ) -> pd.DataFrame:
     """
-    100 eczanelik dengeli demo üretir.
+    Şehre göre değişen eczane sayısıyla dengeli demo üretir.
 
-    4 ana bölge × 4 halka = 16 alt grup kullanılır.
-    100 eczane bu gruplara mümkün olduğunca dengeli dağıtılır:
-    ilk 4 alt grupta 7, kalan 12 alt grupta 6 eczane.
+    4 ana bölge × 4 halka = 16 alt grup kullanılır. Toplam eczane
+    sayısı alt gruplara mümkün olduğunca eşit dağıtılır; grup büyüklükleri
+    arasındaki fark en fazla 1 olur.
     """
-    if total_pharmacies != 100:
-        raise ValueError("Bu sade demo yalnızca 100 eczane üzerinden çalışır.")
+    if total_pharmacies < 16:
+        raise ValueError("Demo için en az 16 eczane gereklidir.")
 
-    rng = random.Random(seed)
+    # Aynı şehir her çalıştırmada aynı yerleşimi üretir; şehirler birbirinden ayrışır.
+    city_seed = seed + sum(ord(character) for character in city_name)
+    rng = random.Random(city_seed)
     rows = []
     pharmacy_id = 1
     reference_date = pd.Timestamp("2026-08-01")
@@ -277,8 +291,9 @@ def generate_pharmacies(
         for region in ("A", "B", "C", "D")
         for ring_no in range(1, 5)
     ]
+    base_count, remainder = divmod(total_pharmacies, len(group_names))
     group_counts = {
-        group_name: 7 if index < 4 else 6
+        group_name: base_count + (1 if index < remainder else 0)
         for index, group_name in enumerate(group_names)
     }
 
