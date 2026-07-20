@@ -18,6 +18,7 @@ from algorithm import (
     KOMB_ABC,
     CITY_CONFIG,
     REGION_ANGLES,
+    region_angles_for_city,
     RING_LIMITS_KM,
     SimulationState,
     eligible_candidates,
@@ -602,13 +603,14 @@ def load_pharmacies(
     city_name: str,
     center_lat: float,
     center_lon: float,
+    total_pharmacies: int,
+    demo_level: str,
 ) -> pd.DataFrame:
-    """
-    Her şehir için 100 sentetik eczane oluşturur.
-    Şehir bazlı CSV kullanılır; eski veya hatalı dosya otomatik yenilenir.
-    """
+    """Şehir ve eczane sayısına özel sentetik demo verisini yükler/üretir."""
+    total_pharmacies = int(total_pharmacies)
+    level_slug = city_slug(demo_level)
     data_path = Path(__file__).with_name(
-        f"pharmacies_{city_slug(city_name)}.csv"
+        f"pharmacies_{city_slug(city_name)}_{total_pharmacies}_{level_slug}.csv"
     )
 
     if data_path.exists():
@@ -618,18 +620,20 @@ def load_pharmacies(
                 existing,
                 center_lat=center_lat,
                 center_lon=center_lon,
-                expected_total=100,
+                expected_total=total_pharmacies,
+                city_name=city_name,
             ):
                 return existing
         except Exception:
             pass
 
+    seed = 42 if demo_level == "Hızlı Demo" else 2026
     generated = generate_pharmacies(
-        seed=42,
+        seed=seed,
         city_name=city_name,
         center_lat=center_lat,
         center_lon=center_lon,
-        total_pharmacies=100,
+        total_pharmacies=total_pharmacies,
     )
     generated.to_csv(data_path, index=False)
     return generated
@@ -1022,6 +1026,7 @@ def add_circular_group_grid(
     active_groups: list[str],
     center_lat: float,
     center_lon: float,
+    city_name: str,
 ) -> None:
 
     region_colors = {
@@ -1031,7 +1036,7 @@ def add_circular_group_grid(
         "D": "#7C3AED",
     }
 
-    region_angles = REGION_ANGLES
+    region_angles = region_angles_for_city(city_name)
     ring_limits = RING_LIMITS_KM
 
     active_set = set(active_groups)
@@ -1154,6 +1159,7 @@ def build_folium_map(
     active_groups: list[str],
     center_lat: float,
     center_lon: float,
+    city_name: str,
 ) -> folium.Map:
     center = [center_lat, center_lon]
     fmap = folium.Map(
@@ -1170,6 +1176,7 @@ def build_folium_map(
         active_groups=active_groups,
         center_lat=center_lat,
         center_lon=center_lon,
+        city_name=city_name,
     )
 
     # Harita görünümünü bütün çembersel yerleşimi kapsayacak şekilde sabitle.
@@ -1331,18 +1338,58 @@ def generate_multi_day_plan(
 
 
 # ==========================================================
-# ŞEHİR SEÇİMİ
+# DEMO OLUŞTURMA / ŞEHİR PROFİLİ
 # ==========================================================
 
 if "selected_city" not in st.session_state:
     st.session_state.selected_city = "Uşak"
+if "pharmacy_count" not in st.session_state:
+    st.session_state.pharmacy_count = int(
+        CITY_CONFIG[st.session_state.selected_city].get("default_pharmacy_count", 100)
+    )
+if "demo_level" not in st.session_state:
+    st.session_state.demo_level = "Gerçekçi Demo"
+if "demo_start_date" not in st.session_state:
+    st.session_state.demo_start_date = date(2026, 8, 1)
+
+
+def sync_city_defaults() -> None:
+    city_name = st.session_state.selected_city
+    st.session_state.pharmacy_count = int(
+        CITY_CONFIG[city_name].get("default_pharmacy_count", 100)
+    )
+
 
 with st.sidebar:
-    st.header("Demo Şehri")
+    st.header("Yeni Demo Oluştur")
     selected_city = st.selectbox(
-        "Şehir seçin",
+        "📍 Şehir",
         options=list(CITY_CONFIG.keys()),
         key="selected_city",
+        on_change=sync_city_defaults,
+    )
+
+    total_pharmacies = int(
+        st.number_input(
+            "👥 Toplam eczane sayısı",
+            min_value=16,
+            max_value=500,
+            step=1,
+            key="pharmacy_count",
+            help="75, 100, 154 gibi istediğiniz toplam sayıyı girebilirsiniz.",
+        )
+    )
+
+    demo_level = st.selectbox(
+        "🎛️ Demo seviyesi",
+        options=["Hızlı Demo", "Gerçekçi Demo"],
+        key="demo_level",
+    )
+
+    demo_start_date = st.date_input(
+        "📅 Başlangıç tarihi",
+        key="demo_start_date",
+        format="DD.MM.YYYY",
     )
 
     presentation_mode = st.toggle(
@@ -1352,13 +1399,32 @@ with st.sidebar:
         help="İlk toplantı için sade ve etkileyici sunum ekranını öne çıkarır.",
     )
 
+    profile = CITY_CONFIG[selected_city]
+    st.markdown(
+        f"""
+        <div style="border:1px solid #DCE6F3;border-radius:16px;padding:14px;
+                    background:linear-gradient(135deg,#F8FBFF,#FFFFFF);margin-top:10px;">
+          <div style="font-size:12px;font-weight:900;color:#2563EB;letter-spacing:.08em;">ŞEHİR PROFİLİ</div>
+          <div style="font-size:22px;font-weight:950;color:#123B6D;margin:5px 0 10px;">{selected_city}</div>
+          <div style="font-size:13px;color:#475467;line-height:1.8;">
+            👥 <b>{total_pharmacies}</b> eczane<br>
+            🧩 <b>16</b> alt grup<br>
+            🏥 Günlük <b>4</b> nöbetçi<br>
+            🗺️ <b>{profile.get('layout', 'Dairesel')}</b><br>
+            📌 {profile.get('profile', 'Demo profili')}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 city_center_lat = float(CITY_CONFIG[selected_city]["lat"])
 city_center_lon = float(CITY_CONFIG[selected_city]["lon"])
+ROTATION_START_DATE = demo_start_date
+profile_key = f"{selected_city}|{total_pharmacies}|{demo_level}|{ROTATION_START_DATE.isoformat()}"
 
-if st.session_state.get("loaded_city") != selected_city:
-    st.session_state.loaded_city = selected_city
-
-    # Şehir değiştiğinde önceki şehrin seçim ve planları taşınmasın.
+if st.session_state.get("loaded_profile") != profile_key:
+    st.session_state.loaded_profile = profile_key
     for key in [
         "state",
         "selected_by_group",
@@ -1366,6 +1432,13 @@ if st.session_state.get("loaded_city") != selected_city:
         "auto_plan_ready",
         "auto_schedule_df",
         "auto_assignments_by_date",
+        "manual_selected_date",
+        "manual_date_widget",
+        "canonical_current_date",
+        "plan_calendar_date",
+        "plan_calendar_picker",
+        "auto_view_date",
+        "auto_generated_start_date",
     ]:
         st.session_state.pop(key, None)
 
@@ -1373,13 +1446,13 @@ pharmacies = load_pharmacies(
     city_name=selected_city,
     center_lat=city_center_lat,
     center_lon=city_center_lon,
+    total_pharmacies=total_pharmacies,
+    demo_level=demo_level,
 )
 
 # ==========================================================
 # SESSION STATE VE PLANLAMA KONTROLLERİ
 # ==========================================================
-
-ROTATION_START_DATE = date(2026, 8, 1)
 
 if "state" not in st.session_state:
     st.session_state.state = SimulationState.from_dataframe(pharmacies)
@@ -2261,7 +2334,7 @@ with tab_demo:
                         )
 
     st.info(
-        f"Bu ekran {selected_city} için 100 sentetik eczane ile hazırlanmış "
+        f"Bu ekran {selected_city} için {total_pharmacies} sentetik eczane ile hazırlanmış "
         "ilk görüşme simülasyonudur. Gerçek kurulumda odanın gerçek eczaneleri, "
         "koordinatları, geçmiş nöbetleri ve yerel kuralları kullanılır."
     )
@@ -2353,6 +2426,7 @@ with tab_map:
             active_groups=active_groups,
             center_lat=city_center_lat,
             center_lon=city_center_lon,
+            city_name=selected_city,
         )
 
         map_event = st_folium(
@@ -2632,95 +2706,124 @@ with tab_groups:
 with tab_plan:
     st.subheader("Oluşturulan Nöbet Planı")
     st.caption(
-        "Takvimden tarih seçtikçe o güne ait aktif gruplar ve seçilmiş eczaneler gösterilir."
+        "Tarihler arasında ilerleyin; seçilen günü otomatik doldurun veya her grup için eczaneyi doğrudan atayın."
     )
 
-    calendar_col, selected_date_col = st.columns([1, 2], gap="large")
+    # ------------------------------------------------------
+    # TARİH GEZGİNİ
+    # ------------------------------------------------------
+    plan_display_date = st.session_state.canonical_current_date
 
-    with calendar_col:
+    if planning_mode == "Otomatik Çok Günlük Plan" and st.session_state.auto_plan_ready:
+        nav_min_date = st.session_state.auto_generated_start_date
+        nav_max_date = nav_min_date + timedelta(
+            days=int(st.session_state.auto_generated_days_count) - 1
+        )
+    else:
+        nav_min_date = ROTATION_START_DATE
+        nav_max_date = ROTATION_START_DATE + timedelta(days=365)
+
+    nav_prev, nav_calendar, nav_today, nav_next = st.columns(
+        [0.8, 2.2, 0.8, 0.8], gap="small"
+    )
+
+    with nav_prev:
+        if st.button(
+            "← Önceki",
+            key="plan_previous_day",
+            use_container_width=True,
+            disabled=plan_display_date <= nav_min_date,
+        ):
+            new_date = max(nav_min_date, plan_display_date - timedelta(days=1))
+            st.session_state.canonical_current_date = new_date
+            st.session_state.plan_calendar_date = new_date
+            st.session_state.plan_calendar_picker = new_date
+            st.session_state.manual_selected_date = new_date
+            st.session_state.manual_date_widget = new_date
+            if planning_mode == "Otomatik Çok Günlük Plan":
+                st.session_state.auto_view_date = new_date
+            else:
+                clear_current_selections()
+            st.rerun()
+
+    with nav_calendar:
         st.date_input(
             "Tarih seçin",
-            min_value=ROTATION_START_DATE,
-            max_value=ROTATION_START_DATE + timedelta(days=365),
+            min_value=nav_min_date,
+            max_value=nav_max_date,
             format="DD.MM.YYYY",
             key="plan_calendar_picker",
             on_change=sync_plan_calendar_date,
+            label_visibility="collapsed",
         )
 
-    with selected_date_col:
-        st.markdown("#### Seçilen Tarih")
-        st.markdown(
-            f"### {st.session_state.canonical_current_date.day} "
-            f"{month_names[st.session_state.canonical_current_date.month]} "
-            f"{st.session_state.canonical_current_date.year}"
-        )
-        st.caption(
-            "Bu tarih; üst özet, harita, grup yapısı ve aşağıdaki tablo için ortaktır."
-        )
+    with nav_today:
+        today_target = min(nav_max_date, max(nav_min_date, date.today()))
+        if st.button(
+            "Bugün",
+            key="plan_today_button",
+            use_container_width=True,
+        ):
+            st.session_state.canonical_current_date = today_target
+            st.session_state.plan_calendar_date = today_target
+            st.session_state.plan_calendar_picker = today_target
+            st.session_state.manual_selected_date = today_target
+            st.session_state.manual_date_widget = today_target
+            if planning_mode == "Otomatik Çok Günlük Plan":
+                st.session_state.auto_view_date = today_target
+            else:
+                clear_current_selections()
+            st.rerun()
 
-    # Bütün ekranlarda kullanılan tek tarih.
+    with nav_next:
+        if st.button(
+            "Sonraki →",
+            key="plan_next_day",
+            use_container_width=True,
+            disabled=plan_display_date >= nav_max_date,
+        ):
+            new_date = min(nav_max_date, plan_display_date + timedelta(days=1))
+            st.session_state.canonical_current_date = new_date
+            st.session_state.plan_calendar_date = new_date
+            st.session_state.plan_calendar_picker = new_date
+            st.session_state.manual_selected_date = new_date
+            st.session_state.manual_date_widget = new_date
+            if planning_mode == "Otomatik Çok Günlük Plan":
+                st.session_state.auto_view_date = new_date
+            else:
+                clear_current_selections()
+            st.rerun()
+
+    # Güncel tarih, buton veya takvim değişiminden sonra tekrar alınır.
     plan_display_date = st.session_state.canonical_current_date
     st.session_state.plan_calendar_date = plan_display_date
     plan_day_no = (plan_display_date - ROTATION_START_DATE).days + 1
-    plan_active_groups = group_for_day(
-        (plan_day_no - 1) % len(KOMB_ABC)
-    )
+    plan_active_groups = group_for_day((plan_day_no - 1) % len(KOMB_ABC))
+    selected_weekday = weekday_names[plan_display_date.weekday()]
 
-    if (
-        planning_mode == "Otomatik Çok Günlük Plan"
-        and st.session_state.auto_plan_ready
-    ):
-        plan_selected_by_group = (
+    st.markdown(
+        f"### {plan_display_date.day} "
+        f"{month_names[plan_display_date.month]} "
+        f"{plan_display_date.year} · {selected_weekday}"
+    )
+    st.caption("Aktif gruplar: " + " · ".join(plan_active_groups))
+
+    if planning_mode == "Otomatik Çok Günlük Plan" and st.session_state.auto_plan_ready:
+        plan_selected_by_group = dict(
             st.session_state.auto_assignments_by_date.get(
-                plan_display_date.isoformat(),
-                {},
+                plan_display_date.isoformat(), {}
             )
         )
-    elif plan_display_date == st.session_state.canonical_current_date:
-        plan_selected_by_group = dict(
-            st.session_state.selected_by_group
-        )
     else:
-        plan_selected_by_group = {}
+        plan_selected_by_group = dict(st.session_state.selected_by_group)
 
-    # Grup kilidi: yalnızca o tarihin aktif gruplarındaki seçimler.
     plan_selected_by_group = sanitize_selected_by_group(
         plan_selected_by_group,
         allowed_groups=plan_active_groups,
     )
 
-    plan_rows = []
-    selected_weekday = weekday_names[plan_display_date.weekday()]
-
-    for plan_group_name in plan_active_groups:
-        pharmacy_id = plan_selected_by_group.get(plan_group_name)
-        pharmacy_name = "Henüz seçilmedi"
-
-        if pharmacy_id is not None:
-            match = pharmacies.loc[
-                pharmacies["pharmacy_id"].astype(int)
-                == int(pharmacy_id)
-            ]
-            if not match.empty:
-                pharmacy_name = str(match.iloc[0]["pharmacy_name"])
-
-        plan_rows.append(
-            {
-                "Gün": selected_weekday,
-                "Grup": plan_group_name,
-                "Eczane": pharmacy_name,
-            }
-        )
-
-    st.dataframe(
-        pd.DataFrame(plan_rows),
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    candidates_by_group = {}
+    candidates_by_group: dict[str, pd.DataFrame] = {}
     selected_ids_for_plan = list(plan_selected_by_group.values())
-
     for group_name in plan_active_groups:
         candidates_by_group[group_name] = eligible_candidates(
             pharmacies=pharmacies,
@@ -2732,128 +2835,196 @@ with tab_plan:
             min_gap_days=min_gap_days,
         )
 
-    components.html(
-        build_plan_cards(
-            active_groups=plan_active_groups,
-            selected_by_group=plan_selected_by_group,
-            source_by_group={
-                group_name: (
-                    "AYÇA çok günlük otomatik plan"
-                    if planning_mode == "Otomatik Çok Günlük Plan"
-                    else st.session_state.selection_source_by_group.get(
-                        group_name,
-                        "Mevcut seçim",
+    # ------------------------------------------------------
+    # HIZLI İŞLEMLER
+    # ------------------------------------------------------
+    action_left, action_middle, action_right = st.columns([1.2, 1, 2])
+
+    with action_left:
+        if planning_mode == "Tek Gün / Manuel Seçim":
+            if st.button(
+                "⚡ Bu Günü Otomatik Doldur",
+                type="primary",
+                use_container_width=True,
+                key=f"plan_autofill_{plan_display_date.isoformat()}",
+            ):
+                chosen: dict[str, int] = {}
+                temp_state = state.copy()
+                for group_name in plan_active_groups:
+                    result = eligible_candidates(
+                        pharmacies=pharmacies,
+                        group_name=group_name,
+                        selected_ids=list(chosen.values()),
+                        state=temp_state,
+                        current_date=plan_display_date,
+                        min_distance_km=min_distance_km,
+                        min_gap_days=min_gap_days,
                     )
-                )
-                for group_name in plan_selected_by_group
-            },
-            candidates_by_group=candidates_by_group,
-        ),
-        height=190,
-        scrolling=False,
-    )
-
-    plan_left, plan_right = st.columns([1.45, 1], gap="large")
-
-    with plan_left:
-        st.markdown("### İleri Tarih Planı")
-
-        if planning_mode == "Otomatik Çok Günlük Plan":
-            if not st.session_state.auto_plan_ready:
-                st.info(
-                    "Sol menüden başlangıç tarihini ve gün sayısını seçip "
-                    "'Çok Günlük Planı Oluştur' butonuna basın."
-                )
-            else:
-                display_auto_df = st.session_state.auto_schedule_df.drop(
-                    columns=["Eczane ID"],
-                    errors="ignore",
-                )
-                st.dataframe(
-                    display_auto_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    height=510,
-                )
-        else:
-            st.info(
-                "Manuel modda takvimden seçilen günün mevcut atamaları "
-                "üstte gösterilir. Çok günlük otomatik plan için sol menüden "
-                "Otomatik Çok Günlük Plan moduna geçin."
-            )
-
-    with plan_right:
-        st.markdown("### Seçilen Günün Detayları")
-
-        if not plan_selected_by_group:
-            st.info(
-                "Bu tarih için henüz eczane seçilmedi."
-            )
-        else:
-            for group_name in plan_active_groups:
-                pharmacy_id = plan_selected_by_group.get(group_name)
-                if pharmacy_id is None:
-                    continue
-
-                group_df = candidates_by_group.get(
-                    group_name,
-                    pd.DataFrame(),
-                )
-                match = group_df.loc[
-                    group_df["pharmacy_id"].astype(int)
-                    == int(pharmacy_id)
-                ]
-
-                if match.empty:
-                    pharmacy_match = pharmacies.loc[
-                        pharmacies["pharmacy_id"].astype(int)
-                        == int(pharmacy_id)
-                    ]
-                    if pharmacy_match.empty:
-                        continue
-                    selected_row = pharmacy_match.iloc[0].copy()
-                    selected_row["decision_score"] = 0
-                    selected_row["days_since_last_duty"] = None
-                else:
-                    selected_row = match.iloc[0]
-
-                with st.container(border=True):
-                    st.markdown(
-                        f"#### {group_name} · "
-                        f"{selected_row['pharmacy_name']}"
+                    valid = result[result["selectable"]].sort_values(
+                        ["decision_score", "distance_to_nearest_selected_km"],
+                        ascending=[False, False],
+                        na_position="last",
                     )
-                    st.caption(
-                        "AYÇA otomatik plan"
-                        if planning_mode == "Otomatik Çok Günlük Plan"
-                        else st.session_state.selection_source_by_group.get(
-                            group_name,
-                            "Mevcut seçim",
-                        )
-                    )
+                    if not valid.empty:
+                        pid = int(valid.iloc[0]["pharmacy_id"])
+                        chosen[group_name] = pid
+                        temp_state.apply_assignment(pid, plan_display_date)
 
-        st.markdown("### 8 Günlük Grup Rotasyonu")
-        rotation_rows = []
-        for idx, combo in enumerate(KOMB_ABC, start=1):
-            rotation_rows.append(
-                {
-                    "Gün": idx,
-                    "Grup Kombinasyonu": " • ".join(combo),
-                    "Durum": (
-                        "Aktif"
-                        if idx
-                        == ((plan_day_no - 1) % len(KOMB_ABC)) + 1
-                        else ""
-                    ),
+                st.session_state.selected_by_group = chosen
+                st.session_state.selection_source_by_group = {
+                    group_name: "AYÇA otomatik öneri"
+                    for group_name in chosen
                 }
-            )
+                st.rerun()
+        else:
+            st.success("Çok günlük otomatik plan görüntüleniyor.")
 
-        st.dataframe(
-            pd.DataFrame(rotation_rows),
-            use_container_width=True,
-            hide_index=True,
-            height=300,
+    with action_middle:
+        if planning_mode == "Tek Gün / Manuel Seçim":
+            if st.button(
+                "Seçimleri Temizle",
+                use_container_width=True,
+                key=f"plan_clear_{plan_display_date.isoformat()}",
+            ):
+                clear_current_selections()
+                st.rerun()
+
+    with action_right:
+        completed_count = len(plan_selected_by_group)
+        st.progress(completed_count / max(1, len(plan_active_groups)))
+        st.caption(
+            f"{completed_count}/{len(plan_active_groups)} grup tamamlandı"
         )
 
+    # ------------------------------------------------------
+    # GRUP BAZLI DOĞRUDAN ATAMA
+    # ------------------------------------------------------
+    st.markdown("### Günlük Atamalar")
+    group_columns = st.columns(4, gap="medium")
+
+    for index, group_name in enumerate(plan_active_groups):
+        with group_columns[index]:
+            group_df = candidates_by_group[group_name].copy()
+            current_pid = plan_selected_by_group.get(group_name)
+
+            with st.container(border=True):
+                st.markdown(f"#### {group_name} Grubu")
+
+                if current_pid is not None:
+                    current_match = pharmacies.loc[
+                        pharmacies["pharmacy_id"].astype(int) == int(current_pid)
+                    ]
+                    current_name = (
+                        str(current_match.iloc[0]["pharmacy_name"])
+                        if not current_match.empty
+                        else "Seçildi"
+                    )
+                    st.success(current_name)
+                else:
+                    st.warning("Henüz atanmadı")
+
+                selectable_df = group_df[group_df["selectable"]].sort_values(
+                    "decision_score", ascending=False
+                )
+
+                option_ids = selectable_df["pharmacy_id"].astype(int).tolist()
+                option_labels = {
+                    int(row.pharmacy_id): (
+                        f"{row.pharmacy_name} · %{float(row.decision_score):.0f}"
+                    )
+                    for row in selectable_df.itertuples()
+                }
+
+                if current_pid is not None and int(current_pid) not in option_ids:
+                    option_ids.insert(0, int(current_pid))
+                    option_labels[int(current_pid)] = current_name
+
+                if not option_ids:
+                    st.error("Uygun aday bulunamadı")
+                    continue
+
+                selected_option = st.selectbox(
+                    "Eczane seç",
+                    options=option_ids,
+                    index=(
+                        option_ids.index(int(current_pid))
+                        if current_pid is not None and int(current_pid) in option_ids
+                        else 0
+                    ),
+                    format_func=lambda pid, labels=option_labels: labels.get(pid, str(pid)),
+                    key=f"plan_assign_select_{plan_display_date.isoformat()}_{group_name}",
+                    disabled=planning_mode == "Otomatik Çok Günlük Plan",
+                )
+
+                if planning_mode == "Tek Gün / Manuel Seçim":
+                    if st.button(
+                        "Bu Gruba Ata",
+                        use_container_width=True,
+                        key=f"plan_assign_button_{plan_display_date.isoformat()}_{group_name}",
+                    ):
+                        st.session_state.selected_by_group[group_name] = int(selected_option)
+                        st.session_state.selection_source_by_group[group_name] = "Plan ekranından manuel seçim"
+                        st.rerun()
+
+                top_row = selectable_df.iloc[0] if not selectable_df.empty else None
+                if top_row is not None:
+                    st.caption(
+                        f"En iyi aday: {top_row['pharmacy_name']} · "
+                        f"uygunluk %{float(top_row['decision_score']):.0f}"
+                    )
+
+    # ------------------------------------------------------
+    # TOPLU PLAN TABLOSU
+    # ------------------------------------------------------
+    plan_rows = []
+    for plan_group_name in plan_active_groups:
+        pharmacy_id = plan_selected_by_group.get(plan_group_name)
+        pharmacy_name = "Henüz seçilmedi"
+        score_value = None
+
+        if pharmacy_id is not None:
+            match = pharmacies.loc[
+                pharmacies["pharmacy_id"].astype(int) == int(pharmacy_id)
+            ]
+            if not match.empty:
+                pharmacy_name = str(match.iloc[0]["pharmacy_name"])
+
+            candidate_match = candidates_by_group[plan_group_name].loc[
+                candidates_by_group[plan_group_name]["pharmacy_id"].astype(int)
+                == int(pharmacy_id)
+            ]
+            if not candidate_match.empty:
+                score_value = round(float(candidate_match.iloc[0]["decision_score"]), 1)
+
+        plan_rows.append(
+            {
+                "Tarih": plan_display_date.strftime("%d.%m.%Y"),
+                "Gün": selected_weekday,
+                "Grup": plan_group_name,
+                "Eczane": pharmacy_name,
+                "Skor": score_value,
+            }
+        )
+
+    st.markdown("### Seçilen Günün Plan Tablosu")
+    st.dataframe(
+        pd.DataFrame(plan_rows),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    if planning_mode == "Otomatik Çok Günlük Plan" and st.session_state.auto_plan_ready:
+        with st.expander("Tüm oluşturulan planı göster", expanded=False):
+            display_auto_df = st.session_state.auto_schedule_df.drop(
+                columns=["Eczane ID"], errors="ignore"
+            )
+            st.dataframe(
+                display_auto_df,
+                use_container_width=True,
+                hide_index=True,
+                height=520,
+            )
+
 st.caption(
-    f"Not: {selected_city} demosu 100 sentetik eczane ve örnek koordinat kullanır. Gerçek kurulumda oda tarafından sağlanan grup, koordinat ve geçmiş nöbet verileri sisteme aktarılır."
+    f"Not: {selected_city} demosu {total_pharmacies} sentetik eczane ve örnek koordinat kullanır. Gerçek kurulumda oda tarafından sağlanan grup, koordinat ve geçmiş nöbet verileri sisteme aktarılır."
 )
