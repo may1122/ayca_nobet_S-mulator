@@ -1,9 +1,9 @@
-# AYÇA NÖBET SİMÜLATÖRÜ - v15.2
+# AYÇA NÖBET PLATFORMU - v16.0
 # Tarih navigasyonu ve takvim senkronizasyonu düzeltildi.
 
 # ==========================================================
-# AYÇA NÖBET SİMÜLATÖRÜ — v15.3
-# Başkan modu kaldırıldı · Şehir bazlı eczane sayısı · Hafif modül tonları
+# AYÇA NÖBET SİMÜLATÖRÜ — v16.0
+# Portal girişi · İki PDF sunum · Normal panel · Harici analiz dashboardu
 # ==========================================================
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from pathlib import Path
 from textwrap import dedent
+import base64
 import math
 import re
 
@@ -628,6 +629,228 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+# ==========================================================
+# PLATFORM GİRİŞİ · SUNUMLAR · DASHBOARD
+# ==========================================================
+DASHBOARD_URL = (
+    "https://eczane-nobet-dashboard-6kfr2ubyh7zjijb5nfbxkf.streamlit.app/"
+    "?utm_source=chatgpt.com"
+)
+
+PRESENTATIONS = {
+    "Giresun Eczacı Odası Sunumu": Path(__file__).with_name(
+        "giresun_ayca_sunum.pdf"
+    ),
+    "AYÇA Genel Tanıtım Sunumu": Path(__file__).with_name(
+        "ayca_genel_sunum.pdf"
+    ),
+}
+
+
+def set_platform_page(page_name: str) -> None:
+    st.session_state.platform_page = page_name
+
+
+def render_pdf(pdf_path: Path) -> None:
+    """Repo kökündeki PDF dosyasını uygulama içinde gösterir."""
+    if not pdf_path.exists():
+        st.error(
+            f"Sunum dosyası bulunamadı: {pdf_path.name}. "
+            "PDF dosyasını GitHub'da app.py ile aynı klasöre yükleyin."
+        )
+        return
+
+    pdf_bytes = pdf_path.read_bytes()
+    pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+
+    components.html(
+        f"""
+        <!doctype html>
+        <html lang="tr">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <style>
+            html, body {{ margin:0; padding:0; background:#F8FAFC; }}
+            iframe {{
+              width:100%; height:900px; border:1px solid #DCE3EE;
+              border-radius:16px; background:white;
+            }}
+          </style>
+        </head>
+        <body>
+          <iframe src="data:application/pdf;base64,{pdf_base64}"></iframe>
+        </body>
+        </html>
+        """,
+        height=920,
+        scrolling=False,
+    )
+
+    st.download_button(
+        "⬇️ Sunumu PDF olarak indir",
+        data=pdf_bytes,
+        file_name=pdf_path.name,
+        mime="application/pdf",
+        use_container_width=True,
+    )
+
+
+def render_platform_home() -> None:
+    st.markdown(
+        """
+        <div class="presentation-hero">
+          <div class="presentation-kicker">AYÇA NÖBET PLATFORMU</div>
+          <div class="presentation-title">Sunum, canlı simülasyon ve analiz tek merkezde</div>
+          <div class="presentation-subtitle">
+            Kurumsal sunumları görüntüleyin, nöbet planlama motorunu canlı deneyin
+            veya örnek veriyle çalışan analiz dashboarduna geçin.
+          </div>
+          <div class="presentation-badges">
+            <span class="presentation-badge">📽️ Kurumsal Sunumlar</span>
+            <span class="presentation-badge">⚙️ Canlı Nöbet Simülatörü</span>
+            <span class="presentation-badge">📊 Analiz Dashboardu</span>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col1, col2, col3 = st.columns(3, gap="large")
+
+    with col1:
+        st.markdown(
+            """
+            <div class="feature-card">
+              <div class="feature-icon">📽️</div>
+              <div class="feature-title">Kurumsal Sunumlar</div>
+              <div class="feature-text">
+                Giresun'a özel sunumu veya şehirden bağımsız genel AYÇA tanıtımını
+                uygulama içinde tam ekran inceleyin.
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.button(
+            "Sunumları Aç",
+            type="primary",
+            use_container_width=True,
+            key="portal_open_presentations",
+            on_click=set_platform_page,
+            args=("presentations",),
+        )
+
+    with col2:
+        st.markdown(
+            """
+            <div class="feature-card">
+              <div class="feature-icon">⚙️</div>
+              <div class="feature-title">Canlı Nöbet Simülatörü</div>
+              <div class="feature-text">
+                Mevcut normal paneliniz; şehir seçimi, harita, grup motoru,
+                aday eleme ve otomatik planlama özellikleriyle aynen korunur.
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.button(
+            "Simülatöre Gir",
+            use_container_width=True,
+            key="portal_open_simulator",
+            on_click=set_platform_page,
+            args=("simulator",),
+        )
+
+    with col3:
+        st.markdown(
+            """
+            <div class="feature-card">
+              <div class="feature-icon">📊</div>
+              <div class="feature-title">Analiz Dashboardu</div>
+              <div class="feature-text">
+                Nöbet planının tarih, grup, eczane ve hafta içi/hafta sonu
+                analizlerini ayrı Streamlit uygulamasında açın.
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.link_button(
+            "Dashboardu Aç ↗",
+            DASHBOARD_URL,
+            type="primary",
+            use_container_width=True,
+        )
+
+    st.caption(
+        "Dashboard bağlantısı yeni sekmede açılır. Sunumlar ve simülatör aynı uygulama içinde çalışır."
+    )
+
+
+def render_presentations_page() -> None:
+    nav_left, nav_right = st.columns([1, 5])
+    with nav_left:
+        st.button(
+            "← Ana Menü",
+            use_container_width=True,
+            key="presentation_home_button",
+            on_click=set_platform_page,
+            args=("home",),
+        )
+    with nav_right:
+        st.markdown("## AYÇA Kurumsal Sunumları")
+        st.caption("Görüntülemek istediğiniz sunumu seçin.")
+
+    selected_presentation = st.selectbox(
+        "Sunum seçimi",
+        options=list(PRESENTATIONS.keys()),
+        key="selected_presentation_name",
+    )
+    render_pdf(PRESENTATIONS[selected_presentation])
+
+
+if "platform_page" not in st.session_state:
+    st.session_state.platform_page = "home"
+
+if st.session_state.platform_page == "home":
+    render_platform_home()
+    st.stop()
+
+if st.session_state.platform_page == "presentations":
+    render_presentations_page()
+    st.stop()
+
+# Simülatör içinde her zaman erişilebilir hızlı navigasyon.
+nav_home, nav_presentations, nav_dashboard, nav_space = st.columns(
+    [1.05, 1.25, 1.35, 3.5], gap="small"
+)
+with nav_home:
+    st.button(
+        "← Ana Menü",
+        use_container_width=True,
+        key="simulator_home_button",
+        on_click=set_platform_page,
+        args=("home",),
+    )
+with nav_presentations:
+    st.button(
+        "📽️ Sunumlar",
+        use_container_width=True,
+        key="simulator_presentations_button",
+        on_click=set_platform_page,
+        args=("presentations",),
+    )
+with nav_dashboard:
+    st.link_button(
+        "📊 Dashboard ↗",
+        DASHBOARD_URL,
+        use_container_width=True,
+    )
+
 
 def city_slug(city_name: str) -> str:
     translation = str.maketrans(
