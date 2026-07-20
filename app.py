@@ -1,6 +1,11 @@
 # AYÇA NÖBET SİMÜLATÖRÜ - v15.2
 # Tarih navigasyonu ve takvim senkronizasyonu düzeltildi.
 
+# ==========================================================
+# AYÇA NÖBET SİMÜLATÖRÜ — v15.3
+# Başkan modu kaldırıldı · Şehir bazlı eczane sayısı · Hafif modül tonları
+# ==========================================================
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -587,6 +592,38 @@ st.markdown(
             font-size: 12px;
             margin: 2px 0 8px 0;
         }
+
+
+        /* v15.3 — modüller arası hafif ton ve geçiş */
+        div[data-baseweb="tab-list"] {
+            gap: 7px;
+            padding: 5px;
+            border-radius: 15px;
+            background: linear-gradient(90deg, #F7FAFF 0%, #FBFAFF 50%, #F7FCFA 100%);
+            border: 1px solid #E9EEF5;
+        }
+        button[data-baseweb="tab"] {
+            border-radius: 11px;
+            transition: background-color .22s ease, color .22s ease, box-shadow .22s ease;
+        }
+        button[data-baseweb="tab"]:nth-child(1) { background: rgba(37, 99, 235, .025); }
+        button[data-baseweb="tab"]:nth-child(2) { background: rgba(14, 165, 233, .025); }
+        button[data-baseweb="tab"]:nth-child(3) { background: rgba(124, 58, 237, .022); }
+        button[data-baseweb="tab"]:nth-child(4) { background: rgba(16, 185, 129, .025); }
+        button[data-baseweb="tab"][aria-selected="true"] {
+            background: rgba(255,255,255,.94);
+            box-shadow: 0 4px 14px rgba(16,24,40,.055);
+        }
+        div[data-testid="stTabContent"] {
+            padding: 15px 12px 8px 12px;
+            border-radius: 0 0 18px 18px;
+            background: linear-gradient(180deg, rgba(248,250,252,.50) 0%, rgba(255,255,255,0) 150px);
+            transition: background .25s ease;
+        }
+        section[data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #F8FAFD 0%, #F5F7FB 100%);
+        }
+
     </style>
     """,
     unsafe_allow_html=True,
@@ -605,10 +642,11 @@ def load_pharmacies(
     city_name: str,
     center_lat: float,
     center_lon: float,
+    total_pharmacies: int,
 ) -> pd.DataFrame:
     """
-    Her şehir için 100 sentetik eczane oluşturur.
-    Şehir bazlı CSV kullanılır; eski veya hatalı dosya otomatik yenilenir.
+    Her şehir için CITY_CONFIG içinde tanımlanan sayıda sentetik eczane oluşturur.
+    Şehir bazlı CSV kullanılır; sayı, sürüm veya yerleşim hatalıysa otomatik yenilenir.
     """
     data_path = Path(__file__).with_name(
         f"pharmacies_{city_slug(city_name)}.csv"
@@ -621,7 +659,7 @@ def load_pharmacies(
                 existing,
                 center_lat=center_lat,
                 center_lon=center_lon,
-                expected_total=100,
+                expected_total=total_pharmacies,
             ):
                 return existing
         except Exception:
@@ -632,7 +670,7 @@ def load_pharmacies(
         city_name=city_name,
         center_lat=center_lat,
         center_lon=center_lon,
-        total_pharmacies=100,
+        total_pharmacies=total_pharmacies,
     )
     generated.to_csv(data_path, index=False)
     return generated
@@ -1348,15 +1386,13 @@ with st.sidebar:
         key="selected_city",
     )
 
-    presentation_mode = st.toggle(
-        "Başkan modu",
-        value=True,
-        key="presentation_mode",
-        help="İlk toplantı için sade ve etkileyici sunum ekranını öne çıkarır.",
-    )
 
 city_center_lat = float(CITY_CONFIG[selected_city]["lat"])
 city_center_lon = float(CITY_CONFIG[selected_city]["lon"])
+city_pharmacy_count = int(CITY_CONFIG[selected_city]["pharmacy_count"])
+
+with st.sidebar:
+    st.caption(f"{selected_city} demo ölçeği: **{city_pharmacy_count} eczane**")
 
 if st.session_state.get("loaded_city") != selected_city:
     st.session_state.loaded_city = selected_city
@@ -1384,6 +1420,7 @@ pharmacies = load_pharmacies(
     city_name=selected_city,
     center_lat=city_center_lat,
     center_lon=city_center_lon,
+    total_pharmacies=city_pharmacy_count,
 )
 
 # ==========================================================
