@@ -4,3 +4,4 @@ numpy>=1.26
 pydeck>=0.9
 folium>=0.17
 streamlit-folium>=0.22
+streamlit-pdf
