@@ -585,6 +585,50 @@ st.markdown(
             font-size: 12px;
             margin: 2px 0 8px 0;
         }
+
+        /* SaaS arayüz katmanı */
+        section[data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #071B33 0%, #0B284B 55%, #123B6D 100%);
+            border-right: 1px solid rgba(255,255,255,.08);
+        }
+        section[data-testid="stSidebar"] * { color: #EAF2FF; }
+        section[data-testid="stSidebar"] label,
+        section[data-testid="stSidebar"] .stCaption { color: #C7D7EA !important; }
+        section[data-testid="stSidebar"] [data-baseweb="select"] > div,
+        section[data-testid="stSidebar"] input {
+            background: rgba(255,255,255,.08) !important;
+            border-color: rgba(255,255,255,.15) !important;
+            color: #FFFFFF !important;
+        }
+        .saas-topbar {
+            display:flex;align-items:center;justify-content:space-between;gap:18px;
+            border:1px solid #E4E7EC;border-radius:18px;padding:13px 16px;
+            background:rgba(255,255,255,.94);box-shadow:0 8px 26px rgba(16,24,40,.06);
+            margin:0 0 14px 0;backdrop-filter:blur(12px);
+        }
+        .saas-brand {display:flex;align-items:center;gap:11px;}
+        .saas-logo {width:38px;height:38px;border-radius:12px;display:flex;align-items:center;
+            justify-content:center;background:linear-gradient(135deg,#123B6D,#2563EB);
+            color:white;font-weight:950;box-shadow:0 7px 18px rgba(37,99,235,.24);}
+        .saas-brand-title {font-weight:950;color:#123B6D;font-size:15px;}
+        .saas-brand-sub {font-size:11px;color:#667085;margin-top:2px;}
+        .saas-actions {display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+        .saas-badge {padding:7px 10px;border-radius:999px;background:#F2F4F7;
+            border:1px solid #E4E7EC;color:#344054;font-size:11px;font-weight:850;}
+        .saas-badge.live {background:#ECFDF3;border-color:#BBF7D0;color:#15803D;}
+        .executive-strip {display:grid;grid-template-columns:1.35fr repeat(3,1fr);gap:12px;margin:0 0 16px;}
+        .executive-main,.executive-kpi {border:1px solid #DCE6F3;border-radius:18px;padding:16px;
+            background:#FFFFFF;box-shadow:0 8px 24px rgba(16,24,40,.05);}
+        .executive-main {background:linear-gradient(135deg,#071B33,#123B6D);color:white;}
+        .executive-main .x-title {font-size:20px;font-weight:950;}
+        .executive-main .x-sub {font-size:12px;color:#CFE1F6;margin-top:5px;}
+        .executive-kpi .x-label {font-size:11px;color:#667085;font-weight:800;}
+        .executive-kpi .x-value {font-size:24px;color:#123B6D;font-weight:950;margin-top:6px;}
+        .mode-banner {border-radius:16px;padding:12px 14px;margin:10px 0;
+            background:linear-gradient(135deg,#EFF6FF,#F8FAFC);border:1px solid #BFDBFE;}
+        .mode-banner strong {color:#1D4ED8;}
+        @media(max-width:900px){.executive-strip{grid-template-columns:1fr 1fr}.saas-topbar{align-items:flex-start}}
+        @media(max-width:650px){.executive-strip{grid-template-columns:1fr}.saas-topbar{display:block}.saas-actions{justify-content:flex-start;margin-top:10px}}
     </style>
     """,
     unsafe_allow_html=True,
@@ -634,6 +678,7 @@ def load_pharmacies(
         center_lat=center_lat,
         center_lon=center_lon,
         total_pharmacies=total_pharmacies,
+        realistic=(demo_level == "Gerçekçi Demo"),
     )
     generated.to_csv(data_path, index=False)
     return generated
@@ -1160,6 +1205,7 @@ def build_folium_map(
     center_lat: float,
     center_lon: float,
     city_name: str,
+    demo_level: str,
 ) -> folium.Map:
     center = [center_lat, center_lon]
     fmap = folium.Map(
@@ -1242,7 +1288,8 @@ def build_folium_map(
         ).add_to(fmap)
 
         # Aktif adayların isimleri haritada sürekli görünür.
-        if row.status in {"selected", "selectable"}:
+        show_label = row.status == "selected" or (demo_level == "Gerçekçi Demo" and row.status == "selectable")
+        if show_label:
             folium.Marker(
                 location=[row.lat, row.lon],
                 icon=folium.DivIcon(
@@ -1384,6 +1431,7 @@ with st.sidebar:
         "🎛️ Demo seviyesi",
         options=["Hızlı Demo", "Gerçekçi Demo"],
         key="demo_level",
+        help="Hızlı Demo sade ve seri gösterim; Gerçekçi Demo kümeli yerleşim ve ayrıntılı karar görünümü kullanır.",
     )
 
     demo_start_date = st.date_input(
@@ -1411,7 +1459,8 @@ with st.sidebar:
             🧩 <b>16</b> alt grup<br>
             🏥 Günlük <b>4</b> nöbetçi<br>
             🗺️ <b>{profile.get('layout', 'Dairesel')}</b><br>
-            📌 {profile.get('profile', 'Demo profili')}
+            📌 {profile.get('profile', 'Demo profili')}<br>
+            🎛️ <b>{demo_level}</b>
           </div>
         </div>
         """,
@@ -1921,19 +1970,78 @@ mode_text = (
     else "Otomatik çok günlük plan"
 )
 
+mode_description = (
+    "Sadeleştirilmiş sunum, daha az harita etiketi ve hızlı karar akışı"
+    if demo_level == "Hızlı Demo"
+    else "Kümeli şehir yerleşimi, ayrıntılı skorlar ve tam karar analizi"
+)
+
+st.markdown(
+    f"""
+    <div class="saas-topbar">
+      <div class="saas-brand">
+        <div class="saas-logo">A</div>
+        <div>
+          <div class="saas-brand-title">AYÇA Nöbet Cloud</div>
+          <div class="saas-brand-sub">Akıllı planlama ve karar destek platformu</div>
+        </div>
+      </div>
+      <div class="saas-actions">
+        <span class="saas-badge">{selected_city}</span>
+        <span class="saas-badge">{demo_level}</span>
+        <span class="saas-badge">{total_pharmacies} eczane</span>
+        <span class="saas-badge live">● Sistem aktif</span>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+if presentation_mode:
+    st.markdown(
+        f"""
+        <div class="executive-strip">
+          <div class="executive-main">
+            <div class="x-title">Başkan Yönetici Görünümü</div>
+            <div class="x-sub">Teknik ayrıntılar yerine karar, denge ve operasyon sonucu öne çıkarılır.</div>
+          </div>
+          <div class="executive-kpi"><div class="x-label">ŞEHİR PROFİLİ</div><div class="x-value">{selected_city}</div></div>
+          <div class="executive-kpi"><div class="x-label">AKTİF GRUP</div><div class="x-value">4 / 16</div></div>
+          <div class="executive-kpi"><div class="x-label">VERİ SETİ</div><div class="x-value">{total_pharmacies}</div></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+st.markdown(
+    f'<div class="mode-banner"><strong>{demo_level}</strong> · {mode_description}</div>',
+    unsafe_allow_html=True,
+)
+
+header_kicker = (
+    "YÖNETİCİ SUNUMU · KARAR DESTEK MERKEZİ"
+    if presentation_mode
+    else f"AYÇA NÖBET · {selected_city.upper()} OPERASYON PANELİ"
+)
+header_title = (
+    f"{selected_city} Ecza Odası Yönetici Özeti"
+    if presentation_mode
+    else f"{selected_city} Nöbet Planlama Merkezi"
+)
+header_subtitle = (
+    "Adalet, kapsama, coğrafi denge ve operasyon sonucu tek ekranda izlenir."
+    if presentation_mode
+    else "Grup mantığını, aday elemesini ve nöbet dağılımını canlı olarak yönetin."
+)
+
 st.markdown(
     dedent(
         f"""
         <div class="product-header">
-          <div class="product-kicker">AYÇA NÖBET · {selected_city.upper()} DEMOSU</div>
-          <div class="product-title">{selected_city} Nöbet Planlama Merkezi</div>
-          <div class="product-subtitle">
-            İlk toplantıda grup mantığını, aday elemesini ve adil nöbet dağılımını
-            canlı ve anlaşılır biçimde gösterir.
-          </div>
-          <div class="product-date">
-            {date_text} · {weekday_text} · {mode_text}
-          </div>
+          <div class="product-kicker">{header_kicker}</div>
+          <div class="product-title">{header_title}</div>
+          <div class="product-subtitle">{header_subtitle}</div>
+          <div class="product-date">{date_text} · {weekday_text} · {mode_text}</div>
         </div>
         """
     ).strip(),
@@ -2036,11 +2144,12 @@ with tab_demo:
             tek karar motorunda birleşir.
           </div>
           <div class="presentation-badges">
-            <span class="presentation-badge">🏥 100 Eczane</span>
+            <span class="presentation-badge">🏥 {total_pharmacies} Eczane</span>
             <span class="presentation-badge">🧭 4 Bölge</span>
             <span class="presentation-badge">⭕ 16 Alt Grup</span>
             <span class="presentation-badge">📍 Canlı Mesafe Kontrolü</span>
             <span class="presentation-badge">⚖️ Adalet Odaklı</span>
+            <span class="presentation-badge">🎛️ {demo_level}</span>
           </div>
         </div>
         """,
@@ -2427,6 +2536,7 @@ with tab_map:
             center_lat=city_center_lat,
             center_lon=city_center_lon,
             city_name=selected_city,
+            demo_level=demo_level,
         )
 
         map_event = st_folium(
