@@ -1,9 +1,9 @@
-# AYÇA NÖBET PLATFORMU - v16.0
+# AYÇA NÖBET SİMÜLATÖRÜ - v16.1
 # Tarih navigasyonu ve takvim senkronizasyonu düzeltildi.
 
 # ==========================================================
-# AYÇA NÖBET SİMÜLATÖRÜ — v16.0
-# Portal girişi · İki PDF sunum · Normal panel · Harici analiz dashboardu
+# AYÇA NÖBET SİMÜLATÖRÜ — v16.1
+# Simülatör üstünde kompakt Sunumlar ve Dashboard butonları
 # ==========================================================
 
 from __future__ import annotations
@@ -632,7 +632,7 @@ st.markdown(
 
 
 # ==========================================================
-# PLATFORM GİRİŞİ · SUNUMLAR · DASHBOARD
+# SUNUMLAR · DASHBOARD HIZLI ERİŞİM
 # ==========================================================
 DASHBOARD_URL = (
     "https://eczane-nobet-dashboard-6kfr2ubyh7zjijb5nfbxkf.streamlit.app/"
@@ -654,7 +654,6 @@ def set_platform_page(page_name: str) -> None:
 
 
 def render_pdf(pdf_path: Path) -> None:
-    """Repo kökündeki PDF dosyasını uygulama içinde gösterir."""
     if not pdf_path.exists():
         st.error(
             f"Sunum dosyası bulunamadı: {pdf_path.name}. "
@@ -698,112 +697,18 @@ def render_pdf(pdf_path: Path) -> None:
     )
 
 
-def render_platform_home() -> None:
-    st.markdown(
-        """
-        <div class="presentation-hero">
-          <div class="presentation-kicker">AYÇA NÖBET PLATFORMU</div>
-          <div class="presentation-title">Sunum, canlı simülasyon ve analiz tek merkezde</div>
-          <div class="presentation-subtitle">
-            Kurumsal sunumları görüntüleyin, nöbet planlama motorunu canlı deneyin
-            veya örnek veriyle çalışan analiz dashboarduna geçin.
-          </div>
-          <div class="presentation-badges">
-            <span class="presentation-badge">📽️ Kurumsal Sunumlar</span>
-            <span class="presentation-badge">⚙️ Canlı Nöbet Simülatörü</span>
-            <span class="presentation-badge">📊 Analiz Dashboardu</span>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    col1, col2, col3 = st.columns(3, gap="large")
-
-    with col1:
-        st.markdown(
-            """
-            <div class="feature-card">
-              <div class="feature-icon">📽️</div>
-              <div class="feature-title">Kurumsal Sunumlar</div>
-              <div class="feature-text">
-                Giresun'a özel sunumu veya şehirden bağımsız genel AYÇA tanıtımını
-                uygulama içinde tam ekran inceleyin.
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+def render_presentations_page() -> None:
+    back_col, title_col = st.columns([1, 5])
+    with back_col:
         st.button(
-            "Sunumları Aç",
-            type="primary",
+            "← Simülatöre Dön",
             use_container_width=True,
-            key="portal_open_presentations",
-            on_click=set_platform_page,
-            args=("presentations",),
-        )
-
-    with col2:
-        st.markdown(
-            """
-            <div class="feature-card">
-              <div class="feature-icon">⚙️</div>
-              <div class="feature-title">Canlı Nöbet Simülatörü</div>
-              <div class="feature-text">
-                Mevcut normal paneliniz; şehir seçimi, harita, grup motoru,
-                aday eleme ve otomatik planlama özellikleriyle aynen korunur.
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.button(
-            "Simülatöre Gir",
-            use_container_width=True,
-            key="portal_open_simulator",
+            key="presentation_back_button",
             on_click=set_platform_page,
             args=("simulator",),
         )
-
-    with col3:
-        st.markdown(
-            """
-            <div class="feature-card">
-              <div class="feature-icon">📊</div>
-              <div class="feature-title">Analiz Dashboardu</div>
-              <div class="feature-text">
-                Nöbet planının tarih, grup, eczane ve hafta içi/hafta sonu
-                analizlerini ayrı Streamlit uygulamasında açın.
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.link_button(
-            "Dashboardu Aç ↗",
-            DASHBOARD_URL,
-            type="primary",
-            use_container_width=True,
-        )
-
-    st.caption(
-        "Dashboard bağlantısı yeni sekmede açılır. Sunumlar ve simülatör aynı uygulama içinde çalışır."
-    )
-
-
-def render_presentations_page() -> None:
-    nav_left, nav_right = st.columns([1, 5])
-    with nav_left:
-        st.button(
-            "← Ana Menü",
-            use_container_width=True,
-            key="presentation_home_button",
-            on_click=set_platform_page,
-            args=("home",),
-        )
-    with nav_right:
+    with title_col:
         st.markdown("## AYÇA Kurumsal Sunumları")
-        st.caption("Görüntülemek istediğiniz sunumu seçin.")
 
     selected_presentation = st.selectbox(
         "Sunum seçimi",
@@ -814,29 +719,15 @@ def render_presentations_page() -> None:
 
 
 if "platform_page" not in st.session_state:
-    st.session_state.platform_page = "home"
-
-if st.session_state.platform_page == "home":
-    render_platform_home()
-    st.stop()
+    st.session_state.platform_page = "simulator"
 
 if st.session_state.platform_page == "presentations":
     render_presentations_page()
     st.stop()
 
-# Simülatör içinde her zaman erişilebilir hızlı navigasyon.
-nav_home, nav_presentations, nav_dashboard, nav_space = st.columns(
-    [1.05, 1.25, 1.35, 3.5], gap="small"
-)
-with nav_home:
-    st.button(
-        "← Ana Menü",
-        use_container_width=True,
-        key="simulator_home_button",
-        on_click=set_platform_page,
-        args=("home",),
-    )
-with nav_presentations:
+# Simülatör ekranının üzerinde yalnızca iki kompakt buton.
+quick_left, quick_mid, quick_right = st.columns([1.15, 1.2, 5.65], gap="small")
+with quick_left:
     st.button(
         "📽️ Sunumlar",
         use_container_width=True,
@@ -844,7 +735,7 @@ with nav_presentations:
         on_click=set_platform_page,
         args=("presentations",),
     )
-with nav_dashboard:
+with quick_mid:
     st.link_button(
         "📊 Dashboard ↗",
         DASHBOARD_URL,
