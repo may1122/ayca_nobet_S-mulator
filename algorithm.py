@@ -12,11 +12,11 @@ import pandas as pd
 # ==========================================================
 # DEMO COĞRAFİ YERLEŞİM SABİTLERİ
 # ==========================================================
-DEMO_LAYOUT_VERSION = 6
+DEMO_LAYOUT_VERSION = 7
 
 CITY_CONFIG = {
     "Uşak": {"lat": 38.6742, "lon": 29.4058, "default_pharmacy_count": 75, "profile": "İç Ege", "layout": "Dairesel"},
-    "Giresun": {"lat": 40.8875, "lon": 38.3895, "default_pharmacy_count": 100, "profile": "Karadeniz kıyı", "layout": "Kıyı koridoru"},
+    "Giresun": {"lat": 40.9025, "lon": 38.3895, "default_pharmacy_count": 100, "profile": "Karadeniz kıyı", "layout": "Kıyı koridoru", "center_note": "Demo merkezi şehir dokusunu daha iyi kapsayacak şekilde kuzeye taşındı"},
     "Erzurum": {"lat": 39.9043, "lon": 41.2679, "default_pharmacy_count": 154, "profile": "Geniş coğrafya", "layout": "Dairesel"},
     "Kahramanmaraş": {"lat": 37.5753, "lon": 36.9228, "default_pharmacy_count": 210, "profile": "Büyükşehir", "layout": "Dairesel"},
     "Sivas": {"lat": 39.7505, "lon": 37.0150, "default_pharmacy_count": 120, "profile": "İç Anadolu", "layout": "Dairesel"},
@@ -287,6 +287,7 @@ def generate_pharmacies(
     center_lat: float = DEMO_CENTER_LAT,
     center_lon: float = DEMO_CENTER_LON,
     total_pharmacies: int = 100,
+    realistic: bool = True,
 ) -> pd.DataFrame:
     """
     İstenen toplam eczane sayısını 4 ana bölge × 4 halka = 16 alt gruba
@@ -328,16 +329,26 @@ def generate_pharmacies(
 
             for local_index in range(subgroup_count):
                 fraction = (local_index + 1) / (subgroup_count + 1)
-                base_angle = usable_start + (usable_end - usable_start) * fraction
-                angle_deg = base_angle + rng.uniform(-1.8, 1.8)
+                if realistic:
+                    # Gerçekçi modda eczaneler kusursuz bir ızgara yerine
+                    # şehir dokusuna benzer biçimde küçük kümeler oluşturur.
+                    clustered_fraction = 0.5 + (fraction - 0.5) * 0.82
+                    base_angle = usable_start + (usable_end - usable_start) * clustered_fraction
+                    angle_deg = base_angle + rng.uniform(-4.2, 4.2)
+                else:
+                    base_angle = usable_start + (usable_end - usable_start) * fraction
+                    angle_deg = base_angle + rng.uniform(-1.2, 1.2)
 
                 radial_fraction = (
                     ((local_index * 2) % subgroup_count) + 1
                 ) / (subgroup_count + 1)
+                if realistic:
+                    radial_fraction = 0.16 + 0.84 * (radial_fraction ** 1.22)
                 base_distance = safe_inner + (
                     safe_outer - safe_inner
                 ) * radial_fraction
-                distance_km = base_distance + rng.uniform(-0.055, 0.055)
+                jitter = 0.105 if realistic else 0.035
+                distance_km = base_distance + rng.uniform(-jitter, jitter)
                 distance_km = min(
                     safe_outer - 0.01,
                     max(safe_inner + 0.01, distance_km),
