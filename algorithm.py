@@ -39,8 +39,9 @@ REGION_ANGLES = {
     "D": (0.0, 90.0),
 }
 
+
 # Kıyı şehirlerinde tam dairesel yerleşim denize taşabilir.
-# Giresun için dört bölgeyi batı-güney-doğu kara koridoruna yayıyoruz.
+# Giresun için gruplar batı-güney-doğu yönündeki kara koridoruna yayılır.
 CITY_REGION_ANGLES = {
     "Giresun": {
         "A": (165.0, 210.0),
@@ -53,7 +54,13 @@ CITY_REGION_ANGLES = {
 
 def region_angles_for_city(city_name: str) -> dict[str, tuple[float, float]]:
     """Şehre özel sektör açılarını döndürür."""
-    return CITY_REGION_ANGLES.get(city_name, REGION_ANGLES)
+    normalized = str(city_name or "").strip().casefold()
+
+    for configured_city, angles in CITY_REGION_ANGLES.items():
+        if configured_city.casefold() == normalized:
+            return angles
+
+    return REGION_ANGLES
 
 # Haritada çizilen ve veri üretiminde kullanılan ortak halka sınırları.
 RING_LIMITS_KM = {
@@ -218,9 +225,11 @@ def pharmacy_layout_is_valid(
 
     tolerance_km = 0.04
     tolerance_deg = 0.8
+
     resolved_city = city_name
     if resolved_city is None and "city" in pharmacies.columns and not pharmacies.empty:
         resolved_city = str(pharmacies.iloc[0]["city"])
+
     region_angles = region_angles_for_city(resolved_city or "")
 
     for row in pharmacies.itertuples():
