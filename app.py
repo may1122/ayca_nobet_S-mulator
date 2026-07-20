@@ -1,3 +1,6 @@
+# AYÇA NÖBET SİMÜLATÖRÜ - v15.2
+# Tarih navigasyonu ve takvim senkronizasyonu düzeltildi.
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -1366,6 +1369,14 @@ if st.session_state.get("loaded_city") != selected_city:
         "auto_plan_ready",
         "auto_schedule_df",
         "auto_assignments_by_date",
+        "auto_generated_start_date",
+        "auto_generated_days_count",
+        "auto_view_date",
+        "canonical_current_date",
+        "plan_calendar_date",
+        "plan_calendar_picker",
+        "daily_plan_date_picker",
+        "auto_calendar_picker",
     ]:
         st.session_state.pop(key, None)
 
@@ -1422,6 +1433,37 @@ if "plan_calendar_date" not in st.session_state:
 
 if "plan_calendar_picker" not in st.session_state:
     st.session_state.plan_calendar_picker = st.session_state.plan_calendar_date
+
+if "daily_plan_date_picker" not in st.session_state:
+    st.session_state.daily_plan_date_picker = st.session_state.canonical_current_date
+
+
+def set_plan_date(new_date: date) -> None:
+    """Bütün plan/takvim tarihlerini tek noktadan senkronize eder."""
+    st.session_state.canonical_current_date = new_date
+    st.session_state.plan_calendar_date = new_date
+    st.session_state.plan_calendar_picker = new_date
+    st.session_state.auto_view_date = new_date
+    st.session_state.daily_plan_date_picker = new_date
+    st.session_state.auto_calendar_picker = new_date
+
+
+def sync_date_from_widget(widget_key: str) -> None:
+    """Date input değiştiğinde diğer tarih state'lerini eşitler."""
+    selected_date = st.session_state.get(widget_key)
+    if isinstance(selected_date, date):
+        set_plan_date(selected_date)
+
+
+def shift_plan_date(widget_key: str, day_delta: int, min_date: date, max_date: date) -> None:
+    """Önceki/sonraki gün butonları için güvenli tarih değiştirici."""
+    current_value = st.session_state.get(widget_key, min_date)
+    if not isinstance(current_value, date):
+        current_value = min_date
+    new_date = current_value + timedelta(days=day_delta)
+    new_date = min(max_date, max(min_date, new_date))
+    set_plan_date(new_date)
+
 
 state: SimulationState = st.session_state.state
 
@@ -1667,10 +1709,7 @@ with st.sidebar:
             st.session_state.auto_assignments_by_date = generated_assignments
             st.session_state.auto_generated_start_date = auto_start_date
             st.session_state.auto_generated_days_count = int(auto_days_count)
-            st.session_state.auto_view_date = auto_start_date
-            st.session_state.canonical_current_date = auto_start_date
-            st.session_state.plan_calendar_date = auto_start_date
-            st.session_state.plan_calendar_picker = auto_start_date
+            set_plan_date(auto_start_date)
             st.session_state.auto_plan_ready = True
             clear_current_selections()
             st.rerun()
@@ -1714,54 +1753,64 @@ if planning_mode == "Otomatik Çok Günlük Plan":
             unsafe_allow_html=True,
         )
 
+        # Widget state'i plan aralığı içinde tutulur.
+        safe_auto_date = min(
+            available_auto_dates[-1],
+            max(available_auto_dates[0], st.session_state.auto_view_date),
+        )
+        if st.session_state.get("auto_calendar_picker") != safe_auto_date:
+            st.session_state.auto_calendar_picker = safe_auto_date
+        set_plan_date(safe_auto_date)
+
         calendar_prev, calendar_picker_col, calendar_next = st.columns(
             [0.8, 2.4, 0.8], gap="medium"
         )
 
         with calendar_prev:
-            if st.button(
+            st.button(
                 "← Önceki",
                 key="auto_previous_date_button",
                 use_container_width=True,
-                disabled=auto_date_index == 0,
-            ):
-                new_date = available_auto_dates[auto_date_index - 1]
-                st.session_state.auto_view_date = new_date
-                st.session_state.canonical_current_date = new_date
-                st.session_state.plan_calendar_date = new_date
-                st.session_state.plan_calendar_picker = new_date
-                st.rerun()
+                disabled=safe_auto_date <= available_auto_dates[0],
+                on_click=shift_plan_date,
+                args=(
+                    "auto_calendar_picker",
+                    -1,
+                    available_auto_dates[0],
+                    available_auto_dates[-1],
+                ),
+            )
 
         with calendar_picker_col:
-            picked_auto_date = st.date_input(
+            st.date_input(
                 "Otomatik plan tarihini seçin",
-                value=st.session_state.auto_view_date,
                 min_value=available_auto_dates[0],
                 max_value=available_auto_dates[-1],
                 format="DD.MM.YYYY",
                 key="auto_calendar_picker",
                 label_visibility="collapsed",
+                on_change=sync_date_from_widget,
+                args=("auto_calendar_picker",),
             )
-            if picked_auto_date != st.session_state.auto_view_date:
-                st.session_state.auto_view_date = picked_auto_date
-                st.session_state.canonical_current_date = picked_auto_date
-                st.session_state.plan_calendar_date = picked_auto_date
-                st.session_state.plan_calendar_picker = picked_auto_date
-                st.rerun()
 
         with calendar_next:
-            if st.button(
+            st.button(
                 "Sonraki →",
                 key="auto_next_date_button",
                 use_container_width=True,
-                disabled=auto_date_index >= len(available_auto_dates) - 1,
-            ):
-                new_date = available_auto_dates[auto_date_index + 1]
-                st.session_state.auto_view_date = new_date
-                st.session_state.canonical_current_date = new_date
-                st.session_state.plan_calendar_date = new_date
-                st.session_state.plan_calendar_picker = new_date
-                st.rerun()
+                disabled=safe_auto_date >= available_auto_dates[-1],
+                on_click=shift_plan_date,
+                args=(
+                    "auto_calendar_picker",
+                    1,
+                    available_auto_dates[0],
+                    available_auto_dates[-1],
+                ),
+            )
+
+        # Callback sonrası güncel tarih ana kaynaktır.
+        st.session_state.auto_view_date = st.session_state.auto_calendar_picker
+        st.session_state.canonical_current_date = st.session_state.auto_calendar_picker
 
         st.caption(
             f"Plan aralığı: {available_auto_dates[0].strftime('%d.%m.%Y')} – "
@@ -2645,61 +2694,69 @@ with tab_plan:
         plan_start = ROTATION_START_DATE
         plan_end = ROTATION_START_DATE + timedelta(days=365)
 
-    # Plan ekranındaki tarih, otomatik plan varsa plan aralığında tutulur.
-    plan_display_date = st.session_state.canonical_current_date
-    if auto_ready:
-        plan_display_date = min(plan_end, max(plan_start, plan_display_date))
-        st.session_state.canonical_current_date = plan_display_date
-        st.session_state.plan_calendar_picker = plan_display_date
+    # Tek tarih kaynağı: daily_plan_date_picker.
+    requested_plan_date = st.session_state.get(
+        "daily_plan_date_picker",
+        st.session_state.get("canonical_current_date", plan_start),
+    )
+    if not isinstance(requested_plan_date, date):
+        requested_plan_date = plan_start
 
-    previous_col, calendar_col, next_col = st.columns([0.8, 2.4, 0.8], gap="medium")
+    safe_plan_date = min(plan_end, max(plan_start, requested_plan_date))
+    if st.session_state.get("daily_plan_date_picker") != safe_plan_date:
+        st.session_state.daily_plan_date_picker = safe_plan_date
+
+    # Diğer plan alanlarını güvenli tarihle eşitle.
+    st.session_state.canonical_current_date = safe_plan_date
+    st.session_state.plan_calendar_date = safe_plan_date
+    st.session_state.plan_calendar_picker = safe_plan_date
+    if auto_ready:
+        st.session_state.auto_view_date = safe_plan_date
+
+    previous_col, calendar_col, next_col = st.columns(
+        [0.8, 2.4, 0.8], gap="medium"
+    )
 
     with previous_col:
-        if st.button(
+        st.button(
             "← Önceki Gün",
             use_container_width=True,
             key="plan_previous_day_button",
-            disabled=plan_display_date <= plan_start,
-        ):
-            new_date = plan_display_date - timedelta(days=1)
-            st.session_state.canonical_current_date = new_date
-            st.session_state.plan_calendar_date = new_date
-            st.session_state.plan_calendar_picker = new_date
-            st.session_state.auto_view_date = new_date
-            st.rerun()
+            disabled=safe_plan_date <= plan_start,
+            on_click=shift_plan_date,
+            args=("daily_plan_date_picker", -1, plan_start, plan_end),
+        )
 
     with calendar_col:
-        picked_plan_date = st.date_input(
+        st.date_input(
             "Plan tarihini seçin",
-            value=plan_display_date,
             min_value=plan_start,
             max_value=plan_end,
             format="DD.MM.YYYY",
             key="daily_plan_date_picker",
             label_visibility="collapsed",
+            on_change=sync_date_from_widget,
+            args=("daily_plan_date_picker",),
         )
-        if picked_plan_date != plan_display_date:
-            st.session_state.canonical_current_date = picked_plan_date
-            st.session_state.plan_calendar_date = picked_plan_date
-            st.session_state.plan_calendar_picker = picked_plan_date
-            st.session_state.auto_view_date = picked_plan_date
-            st.rerun()
 
     with next_col:
-        if st.button(
+        st.button(
             "Sonraki Gün →",
             use_container_width=True,
             key="plan_next_day_button",
-            disabled=plan_display_date >= plan_end,
-        ):
-            new_date = plan_display_date + timedelta(days=1)
-            st.session_state.canonical_current_date = new_date
-            st.session_state.plan_calendar_date = new_date
-            st.session_state.plan_calendar_picker = new_date
-            st.session_state.auto_view_date = new_date
-            st.rerun()
+            disabled=safe_plan_date >= plan_end,
+            on_click=shift_plan_date,
+            args=("daily_plan_date_picker", 1, plan_start, plan_end),
+        )
 
-    plan_display_date = st.session_state.canonical_current_date
+    # Widget callback'lerinden sonra güncel değer doğrudan buradan okunur.
+    plan_display_date = st.session_state.daily_plan_date_picker
+    st.session_state.canonical_current_date = plan_display_date
+    st.session_state.plan_calendar_date = plan_display_date
+    st.session_state.plan_calendar_picker = plan_display_date
+    if auto_ready:
+        st.session_state.auto_view_date = plan_display_date
+
     plan_day_no = (plan_display_date - ROTATION_START_DATE).days + 1
     plan_active_groups = group_for_day((plan_day_no - 1) % len(KOMB_ABC))
     selected_weekday = weekday_names[plan_display_date.weekday()]
@@ -2767,6 +2824,7 @@ with tab_plan:
         pharmacy_id = plan_selected_by_group.get(group_name)
         pharmacy_name = "Henüz atanmadı"
         score = None
+
         if pharmacy_id is not None:
             match = candidates_by_group[group_name].loc[
                 candidates_by_group[group_name]["pharmacy_id"].astype(int)
@@ -2782,21 +2840,29 @@ with tab_plan:
                 if not pharmacy_match.empty:
                     pharmacy_name = str(pharmacy_match.iloc[0]["pharmacy_name"])
 
-        daily_rows.append({
-            "Grup": group_name,
-            "Nöbetçi Eczane": pharmacy_name,
-            "Uygunluk Skoru": "-" if score is None else f"%{score:.0f}",
-        })
+        daily_rows.append(
+            {
+                "Grup": group_name,
+                "Nöbetçi Eczane": pharmacy_name,
+                "Uygunluk Skoru": "-" if score is None else f"%{score:.0f}",
+            }
+        )
 
-    st.dataframe(pd.DataFrame(daily_rows), use_container_width=True, hide_index=True)
+    st.dataframe(
+        pd.DataFrame(daily_rows),
+        use_container_width=True,
+        hide_index=True,
+    )
 
     if auto_ready:
         with st.expander("Tüm otomatik planı tablo olarak göster"):
             full_plan = st.session_state.auto_schedule_df.drop(
-                columns=["Eczane ID"], errors="ignore"
+                columns=["Eczane ID"],
+                errors="ignore",
             )
-            st.dataframe(full_plan, use_container_width=True, hide_index=True, height=430)
-
-st.caption(
-    f"Not: {selected_city} demosu 100 sentetik eczane ve örnek koordinat kullanır. Gerçek kurulumda oda tarafından sağlanan grup, koordinat ve geçmiş nöbet verileri sisteme aktarılır."
-)
+            st.dataframe(
+                full_plan,
+                use_container_width=True,
+                hide_index=True,
+                height=430,
+            )
