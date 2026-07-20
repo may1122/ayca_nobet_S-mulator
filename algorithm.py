@@ -12,11 +12,11 @@ import pandas as pd
 # ==========================================================
 # DEMO COĞRAFİ YERLEŞİM SABİTLERİ
 # ==========================================================
-DEMO_LAYOUT_VERSION = 4
+DEMO_LAYOUT_VERSION = 5
 
 CITY_CONFIG = {
     "Uşak": {"lat": 38.6742, "lon": 29.4058},
-    "Giresun": {"lat": 40.8875, "lon": 38.3895},
+    "Giresun": {"lat": 40.8740, "lon": 38.3895},
     "Erzurum": {"lat": 39.9043, "lon": 41.2679},
     "Kahramanmaraş": {"lat": 37.5753, "lon": 36.9228},
     "Sivas": {"lat": 39.7505, "lon": 37.0150},
