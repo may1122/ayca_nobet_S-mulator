@@ -16,8 +16,7 @@ from streamlit_folium import st_folium
 
 from algorithm import (
     KOMB_ABC,
-    DEMO_CENTER_LAT,
-    DEMO_CENTER_LON,
+    CITY_CONFIG,
     REGION_ANGLES,
     RING_LIMITS_KM,
     SimulationState,
@@ -27,9 +26,9 @@ from algorithm import (
     group_for_day,
     status_palette,
     build_group_svg,
+    build_simulation_summary,
+    build_group_story,
 )
-
-DEMO_CITY_NAME = "Uşak"
 
 st.set_page_config(
     page_title="AYÇA Nöbet | Grup Simülasyonu",
@@ -265,6 +264,321 @@ st.markdown(
             font-weight: 800;
         }
 
+        .demo-stage {
+            border: 1px solid #DCE3EE;
+            border-radius: 20px;
+            padding: 18px;
+            background: linear-gradient(135deg, #FFFFFF 0%, #F8FBFF 100%);
+            box-shadow: 0 10px 26px rgba(16,24,40,.06);
+            margin-bottom: 16px;
+        }
+        .demo-stage-title {
+            font-size: 15px;
+            color: #123B6D;
+            font-weight: 900;
+            margin-bottom: 12px;
+        }
+        .demo-check {
+            display:flex;
+            align-items:center;
+            gap:8px;
+            padding:6px 0;
+            color:#344054;
+            font-size:13px;
+        }
+        .demo-check-icon {
+            width:20px;
+            height:20px;
+            border-radius:50%;
+            background:#DCFCE7;
+            color:#15803D;
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            font-weight:900;
+        }
+        .demo-rule {
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            padding:8px 0;
+            border-bottom:1px solid #EEF2F6;
+            font-size:13px;
+        }
+        .demo-score {
+            font-size:46px;
+            font-weight:950;
+            color:#15803D;
+            line-height:1;
+        }
+        .performance-grid {
+            display:grid;
+            grid-template-columns:repeat(5,minmax(0,1fr));
+            gap:10px;
+        }
+        .performance-card {
+            border:1px solid #E4E7EC;
+            border-radius:14px;
+            padding:14px 10px;
+            text-align:center;
+            background:#FFFFFF;
+        }
+        .performance-value {
+            font-size:23px;
+            color:#123B6D;
+            font-weight:900;
+        }
+        .performance-label {
+            color:#667085;
+            font-size:11px;
+            margin-top:5px;
+        }
+        @media(max-width:900px){
+            .performance-grid{grid-template-columns:1fr 1fr;}
+        }
+
+
+        .showcase-shell {
+            border-radius: 26px;
+            padding: 22px;
+            margin: 8px 0 20px 0;
+            background:
+                radial-gradient(circle at 90% 0%, rgba(59,130,246,.16), transparent 31%),
+                linear-gradient(145deg, #F8FBFF 0%, #FFFFFF 55%, #F4F8FF 100%);
+            border: 1px solid #DCE6F3;
+            box-shadow: 0 18px 50px rgba(18,59,109,.10);
+        }
+        .engine-panel {
+            position: relative;
+            overflow: hidden;
+            border-radius: 24px;
+            padding: 26px;
+            min-height: 245px;
+            color: white;
+            background:
+                radial-gradient(circle at 85% 10%, rgba(56,189,248,.30), transparent 32%),
+                radial-gradient(circle at 12% 95%, rgba(139,92,246,.26), transparent 30%),
+                linear-gradient(135deg, #06182D 0%, #123B6D 55%, #2563EB 100%);
+            box-shadow: 0 18px 40px rgba(18,59,109,.24);
+        }
+        .engine-panel:after {
+            content:"";
+            position:absolute;
+            inset:-40%;
+            background: conic-gradient(
+                from 180deg,
+                transparent,
+                rgba(255,255,255,.08),
+                transparent 30%
+            );
+            animation: ayca-spin 9s linear infinite;
+        }
+        @keyframes ayca-spin { to { transform: rotate(360deg); } }
+        .engine-content { position:relative; z-index:2; }
+        .engine-eyebrow {
+            color:#BAE6FD; font-size:12px; font-weight:900;
+            letter-spacing:.12em; text-transform:uppercase;
+        }
+        .engine-title {
+            font-size:31px; font-weight:950; line-height:1.08;
+            margin:8px 0 8px 0;
+        }
+        .engine-subtitle {
+            color:#DCEBFA; font-size:14px; line-height:1.55; max-width:720px;
+        }
+        .engine-flow {
+            display:flex; gap:8px; flex-wrap:wrap; margin-top:18px;
+        }
+        .engine-node {
+            padding:8px 12px; border-radius:12px;
+            background:rgba(255,255,255,.13);
+            border:1px solid rgba(255,255,255,.20);
+            font-weight:900; backdrop-filter:blur(6px);
+        }
+        .engine-stat-row {
+            display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+            gap:10px; margin-top:18px;
+        }
+        .engine-stat {
+            background:rgba(255,255,255,.10);
+            border:1px solid rgba(255,255,255,.16);
+            border-radius:14px; padding:12px;
+        }
+        .engine-stat-value {font-size:23px;font-weight:950;}
+        .engine-stat-label {font-size:11px;color:#DCEBFA;margin-top:3px;}
+
+        .showcase-section-title {
+            font-size:22px; font-weight:950; color:#123B6D;
+            margin:4px 0 12px 0;
+        }
+        .showcase-section-sub {
+            color:#667085; font-size:13px; margin:-6px 0 15px 0;
+        }
+
+        .duty-grid {
+            display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+            gap:12px;
+        }
+        .duty-card {
+            position:relative; overflow:hidden;
+            border-radius:18px; padding:16px;
+            color:#FFFFFF; min-height:145px;
+            box-shadow:0 12px 28px rgba(16,24,40,.13);
+        }
+        .duty-card:after {
+            content:""; position:absolute; width:100px;height:100px;
+            right:-32px;top:-30px;border-radius:50%;
+            background:rgba(255,255,255,.14);
+        }
+        .duty-group {font-size:12px;font-weight:900;letter-spacing:.06em;}
+        .duty-name {font-size:20px;font-weight:950;margin-top:23px;line-height:1.15;}
+        .duty-score {font-size:12px;margin-top:10px;color:rgba(255,255,255,.88);}
+        .duty-status {
+            display:inline-flex;margin-top:9px;padding:5px 9px;border-radius:999px;
+            background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.25);
+            font-size:11px;font-weight:900;
+        }
+
+        .process-line {
+            display:grid;grid-template-columns:repeat(6,minmax(0,1fr));
+            gap:10px;position:relative;margin-top:12px;
+        }
+        .process-step {
+            text-align:center;padding:16px 9px;border-radius:18px;
+            background:#FFFFFF;border:1px solid #DCE6F3;
+            box-shadow:0 8px 20px rgba(16,24,40,.05);
+        }
+        .process-no {
+            width:30px;height:30px;border-radius:50%;margin:0 auto 8px auto;
+            display:flex;align-items:center;justify-content:center;
+            background:linear-gradient(135deg,#123B6D,#2563EB);
+            color:white;font-weight:950;
+        }
+        .process-icon {font-size:25px;margin-bottom:6px;}
+        .process-title {font-size:12px;font-weight:900;color:#123B6D;}
+        .process-text {font-size:10px;color:#667085;margin-top:5px;line-height:1.35;}
+
+        .capability-grid {
+            display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;
+        }
+        .capability-card {
+            position:relative;overflow:hidden;min-height:175px;
+            border-radius:20px;padding:18px;color:#FFFFFF;
+            box-shadow:0 12px 28px rgba(16,24,40,.12);
+        }
+        .capability-card:before {
+            content:"";position:absolute;inset:0;
+            background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(0,0,0,.10));
+        }
+        .capability-inner {position:relative;z-index:2;}
+        .capability-icon {
+            width:48px;height:48px;border-radius:15px;
+            display:flex;align-items:center;justify-content:center;
+            background:rgba(255,255,255,.17);font-size:25px;
+            border:1px solid rgba(255,255,255,.20);
+        }
+        .capability-title {font-size:17px;font-weight:950;margin-top:17px;}
+        .capability-text {font-size:12px;line-height:1.45;margin-top:7px;color:rgba(255,255,255,.88);}
+        .cap-blue {background:linear-gradient(135deg,#123B6D,#2563EB);}
+        .cap-purple {background:linear-gradient(135deg,#5B21B6,#8B5CF6);}
+        .cap-green {background:linear-gradient(135deg,#047857,#10B981);}
+        .cap-orange {background:linear-gradient(135deg,#C2410C,#F97316);}
+
+        .advantage-strip {
+            display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+            gap:10px;margin-top:12px;
+        }
+        .advantage-item {
+            border-radius:15px;padding:13px;background:#F8FBFF;
+            border:1px solid #DCE6F3;color:#123B6D;font-size:12px;font-weight:850;
+            display:flex;gap:8px;align-items:center;
+        }
+        .advantage-check {
+            width:24px;height:24px;border-radius:50%;
+            background:#DCFCE7;color:#15803D;display:flex;align-items:center;
+            justify-content:center;font-weight:950;flex:0 0 auto;
+        }
+
+        .story-expander-note {
+            padding:13px 15px;border-radius:14px;background:#F8FAFC;
+            border:1px solid #E4E7EC;color:#667085;font-size:13px;margin-bottom:8px;
+        }
+        @media(max-width:1000px){
+            .engine-stat-row,.duty-grid,.capability-grid{grid-template-columns:1fr 1fr;}
+            .process-line{grid-template-columns:repeat(3,1fr);}
+            .advantage-strip{grid-template-columns:1fr 1fr;}
+        }
+        @media(max-width:650px){
+            .engine-stat-row,.duty-grid,.capability-grid,.process-line,.advantage-strip{
+                grid-template-columns:1fr;
+            }
+        }
+
+        .presentation-hero {
+            position: relative;
+            overflow: hidden;
+            border-radius: 24px;
+            padding: 26px 28px;
+            margin: 4px 0 18px 0;
+            color: white;
+            background:
+                radial-gradient(circle at 88% 18%, rgba(56,189,248,.28), transparent 28%),
+                radial-gradient(circle at 15% 100%, rgba(168,85,247,.22), transparent 30%),
+                linear-gradient(135deg, #071B33 0%, #123B6D 52%, #1D4ED8 100%);
+            box-shadow: 0 18px 45px rgba(18,59,109,.24);
+        }
+        .presentation-hero:after {
+            content:"";
+            position:absolute;
+            inset:0;
+            background-image: linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+            background-size: 28px 28px;
+            pointer-events:none;
+        }
+        .presentation-kicker {
+            position:relative; z-index:1;
+            font-size:12px; font-weight:900; letter-spacing:.12em;
+            text-transform:uppercase; color:#BAE6FD; margin-bottom:8px;
+        }
+        .presentation-title {
+            position:relative; z-index:1;
+            font-size:34px; font-weight:950; line-height:1.08; margin:0 0 8px 0;
+        }
+        .presentation-subtitle {
+            position:relative; z-index:1;
+            max-width:820px; color:#DCEBFA; font-size:15px; line-height:1.55;
+        }
+        .presentation-badges {
+            position:relative; z-index:1;
+            display:flex; gap:8px; flex-wrap:wrap; margin-top:16px;
+        }
+        .presentation-badge {
+            display:inline-flex; align-items:center; gap:6px;
+            padding:7px 10px; border-radius:999px;
+            background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18);
+            color:white; font-size:12px; font-weight:800;
+            backdrop-filter: blur(8px);
+        }
+        .calendar-panel {
+            border:1px solid #DCE3EE; border-radius:18px; padding:14px 16px;
+            background:linear-gradient(135deg,#FFFFFF,#F8FBFF);
+            box-shadow:0 8px 22px rgba(16,24,40,.05); margin-bottom:14px;
+        }
+        .feature-grid {
+            display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px;
+            margin:10px 0 18px 0;
+        }
+        .feature-card {
+            border:1px solid #E4E7EC; border-radius:16px; padding:15px;
+            background:#FFFFFF; min-height:132px;
+            box-shadow:0 6px 18px rgba(16,24,40,.045);
+        }
+        .feature-icon {font-size:21px; margin-bottom:8px;}
+        .feature-title {font-weight:900; color:#123B6D; margin-bottom:6px;}
+        .feature-text {font-size:12px; color:#667085; line-height:1.55;}
+        @media(max-width:900px){.feature-grid{grid-template-columns:1fr;}}
+
         .timeline-caption {
             color: #667085;
             font-size: 12px;
@@ -275,27 +589,50 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-DATA_PATH = Path(__file__).with_name("pharmacies.csv")
+def city_slug(city_name: str) -> str:
+    translation = str.maketrans(
+        {"ç": "c", "Ç": "c", "ğ": "g", "Ğ": "g", "ı": "i", "İ": "i",
+         "ö": "o", "Ö": "o", "ş": "s", "Ş": "s", "ü": "u", "Ü": "u"}
+    )
+    return city_name.translate(translation).lower().replace(" ", "_")
+
 
 @st.cache_data
-def load_pharmacies() -> pd.DataFrame:
+def load_pharmacies(
+    city_name: str,
+    center_lat: float,
+    center_lon: float,
+) -> pd.DataFrame:
     """
-    CSV yalnızca yeni çembersel yerleşim standardını karşılıyorsa kullanılır.
-    Eski veya hatalı koordinatlı CSV otomatik olarak yeniden oluşturulur.
+    Her şehir için 100 sentetik eczane oluşturur.
+    Şehir bazlı CSV kullanılır; eski veya hatalı dosya otomatik yenilenir.
     """
-    if DATA_PATH.exists():
+    data_path = Path(__file__).with_name(
+        f"pharmacies_{city_slug(city_name)}.csv"
+    )
+
+    if data_path.exists():
         try:
-            existing = pd.read_csv(DATA_PATH)
-            if pharmacy_layout_is_valid(existing):
+            existing = pd.read_csv(data_path)
+            if pharmacy_layout_is_valid(
+                existing,
+                center_lat=center_lat,
+                center_lon=center_lon,
+                expected_total=100,
+            ):
                 return existing
         except Exception:
             pass
 
-    generated = generate_pharmacies(seed=42)
-    generated.to_csv(DATA_PATH, index=False)
+    generated = generate_pharmacies(
+        seed=42,
+        city_name=city_name,
+        center_lat=center_lat,
+        center_lon=center_lon,
+        total_pharmacies=100,
+    )
+    generated.to_csv(data_path, index=False)
     return generated
-
-pharmacies = load_pharmacies()
 
 def pharmacy_group_for_id(pharmacy_id: int | None) -> str | None:
     if pharmacy_id is None:
@@ -683,9 +1020,9 @@ def add_circular_group_grid(
     fmap: folium.Map,
     map_df: pd.DataFrame,
     active_groups: list[str],
+    center_lat: float,
+    center_lon: float,
 ) -> None:
-    center_lat = DEMO_CENTER_LAT
-    center_lon = DEMO_CENTER_LON
 
     region_colors = {
         "A": "#2563EB",
@@ -815,8 +1152,10 @@ def build_folium_map(
     selected_df: pd.DataFrame,
     min_distance_km: float,
     active_groups: list[str],
+    center_lat: float,
+    center_lon: float,
 ) -> folium.Map:
-    center = [DEMO_CENTER_LAT, DEMO_CENTER_LON]
+    center = [center_lat, center_lon]
     fmap = folium.Map(
         location=center,
         zoom_start=13,
@@ -829,20 +1168,22 @@ def build_folium_map(
         fmap=fmap,
         map_df=map_df,
         active_groups=active_groups,
+        center_lat=center_lat,
+        center_lon=center_lon,
     )
 
     # Harita görünümünü bütün çembersel yerleşimi kapsayacak şekilde sabitle.
     outer_radius_km = max(value[1] for value in RING_LIMITS_KM.values())
     south_west = destination_point(
-        DEMO_CENTER_LAT,
-        DEMO_CENTER_LON,
-        outer_radius_km * 1.12,
+        center_lat,
+        center_lon,
+        outer_radius_km * 1.04,
         225,
     )
     north_east = destination_point(
-        DEMO_CENTER_LAT,
-        DEMO_CENTER_LON,
-        outer_radius_km * 1.12,
+        center_lat,
+        center_lon,
+        outer_radius_km * 1.04,
         45,
     )
     fmap.fit_bounds([south_west, north_east])
@@ -988,6 +1329,51 @@ def generate_multi_day_plan(
 
     return pd.DataFrame(schedule_rows), assignments_by_date
 
+
+# ==========================================================
+# ŞEHİR SEÇİMİ
+# ==========================================================
+
+if "selected_city" not in st.session_state:
+    st.session_state.selected_city = "Uşak"
+
+with st.sidebar:
+    st.header("Demo Şehri")
+    selected_city = st.selectbox(
+        "Şehir seçin",
+        options=list(CITY_CONFIG.keys()),
+        key="selected_city",
+    )
+
+    presentation_mode = st.toggle(
+        "Başkan modu",
+        value=True,
+        key="presentation_mode",
+        help="İlk toplantı için sade ve etkileyici sunum ekranını öne çıkarır.",
+    )
+
+city_center_lat = float(CITY_CONFIG[selected_city]["lat"])
+city_center_lon = float(CITY_CONFIG[selected_city]["lon"])
+
+if st.session_state.get("loaded_city") != selected_city:
+    st.session_state.loaded_city = selected_city
+
+    # Şehir değiştiğinde önceki şehrin seçim ve planları taşınmasın.
+    for key in [
+        "state",
+        "selected_by_group",
+        "selection_source_by_group",
+        "auto_plan_ready",
+        "auto_schedule_df",
+        "auto_assignments_by_date",
+    ]:
+        st.session_state.pop(key, None)
+
+pharmacies = load_pharmacies(
+    city_name=selected_city,
+    center_lat=city_center_lat,
+    center_lon=city_center_lon,
+)
 
 # ==========================================================
 # SESSION STATE VE PLANLAMA KONTROLLERİ
@@ -1319,19 +1705,22 @@ if planning_mode == "Otomatik Çok Günlük Plan":
             st.session_state.auto_view_date
         )
 
-        st.markdown("#### Otomatik Plan Günleri")
         st.markdown(
-            '<div class="timeline-caption">'
-            'Bir güne tıklayın; üst özet, harita, grup yapısı ve plan birlikte değişir.'
-            '</div>',
+            '<div class="calendar-panel">'
+            '<div style="font-weight:900;color:#123B6D;font-size:15px;">Plan Tarihi Seçimi</div>'
+            '<div style="color:#667085;font-size:12px;margin-top:3px;">'
+            'Takvimden bir gün seçildiğinde özet, harita, grup yapısı ve plan birlikte güncellenir.'
+            '</div></div>',
             unsafe_allow_html=True,
         )
 
-        previous_col, date_label_col, next_col = st.columns([1, 3, 1])
+        calendar_prev, calendar_picker_col, calendar_next = st.columns(
+            [0.8, 2.4, 0.8], gap="medium"
+        )
 
-        with previous_col:
+        with calendar_prev:
             if st.button(
-                "← Önceki Gün",
+                "← Önceki",
                 key="auto_previous_date_button",
                 use_container_width=True,
                 disabled=auto_date_index == 0,
@@ -1343,14 +1732,26 @@ if planning_mode == "Otomatik Çok Günlük Plan":
                 st.session_state.plan_calendar_picker = new_date
                 st.rerun()
 
-        with date_label_col:
-            st.markdown(
-                f"### {st.session_state.auto_view_date.strftime('%d.%m.%Y')}"
+        with calendar_picker_col:
+            picked_auto_date = st.date_input(
+                "Otomatik plan tarihini seçin",
+                value=st.session_state.auto_view_date,
+                min_value=available_auto_dates[0],
+                max_value=available_auto_dates[-1],
+                format="DD.MM.YYYY",
+                key="auto_calendar_picker",
+                label_visibility="collapsed",
             )
+            if picked_auto_date != st.session_state.auto_view_date:
+                st.session_state.auto_view_date = picked_auto_date
+                st.session_state.canonical_current_date = picked_auto_date
+                st.session_state.plan_calendar_date = picked_auto_date
+                st.session_state.plan_calendar_picker = picked_auto_date
+                st.rerun()
 
-        with next_col:
+        with calendar_next:
             if st.button(
-                "Sonraki Gün →",
+                "Sonraki →",
                 key="auto_next_date_button",
                 use_container_width=True,
                 disabled=auto_date_index >= len(available_auto_dates) - 1,
@@ -1362,38 +1763,14 @@ if planning_mode == "Otomatik Çok Günlük Plan":
                 st.session_state.plan_calendar_picker = new_date
                 st.rerun()
 
-        # Tarihleri yatay bir zaman çizgisi gibi göster.
-        for row_start in range(0, len(available_auto_dates), 7):
-            row_dates = available_auto_dates[row_start:row_start + 7]
-            row_columns = st.columns(len(row_dates))
-
-            for column, timeline_date in zip(row_columns, row_dates):
-                is_selected = (
-                    timeline_date == st.session_state.auto_view_date
-                )
-                button_label = (
-                    f"● {timeline_date.day}"
-                    if is_selected
-                    else str(timeline_date.day)
-                )
-
-                with column:
-                    if st.button(
-                        button_label,
-                        key=f"auto_timeline_{timeline_date.isoformat()}",
-                        use_container_width=True,
-                        type="primary" if is_selected else "secondary",
-                        help=timeline_date.strftime("%d.%m.%Y"),
-                    ):
-                        st.session_state.auto_view_date = timeline_date
-                        st.session_state.canonical_current_date = timeline_date
-                        st.session_state.plan_calendar_date = timeline_date
-                        st.session_state.plan_calendar_picker = timeline_date
-                        st.rerun()
+        st.caption(
+            f"Plan aralığı: {available_auto_dates[0].strftime('%d.%m.%Y')} – "
+            f"{available_auto_dates[-1].strftime('%d.%m.%Y')} · "
+            f"Seçili gün: {st.session_state.auto_view_date.strftime('%d.%m.%Y')}"
+        )
 
         # canonical_current_date; takvim, özet, harita ve planın
-        # ortak tarihidir. Otomatik gün seçicisi yalnızca kullanıcı
-        # onu değiştirdiğinde bu tarihi günceller.
+        # ortak tarihidir. Takvim seçimi bu tarihi günceller.
         current_date = st.session_state.canonical_current_date
         day_no = (current_date - ROTATION_START_DATE).days + 1
         active_groups = group_for_day(
@@ -1475,11 +1852,11 @@ st.markdown(
     dedent(
         f"""
         <div class="product-header">
-          <div class="product-kicker">AYÇA NÖBET · UŞAK DEMOSU</div>
-          <div class="product-title">Uşak Nöbet Planlama Merkezi</div>
+          <div class="product-kicker">AYÇA NÖBET · {selected_city.upper()} DEMOSU</div>
+          <div class="product-title">{selected_city} Nöbet Planlama Merkezi</div>
           <div class="product-subtitle">
-            Harita, grup yapısı ve oluşturulan plan tek tarih üzerinden
-            canlı olarak senkronize edilir.
+            İlk toplantıda grup mantığını, aday elemesini ve adil nöbet dağılımını
+            canlı ve anlaşılır biçimde gösterir.
           </div>
           <div class="product-date">
             {date_text} · {weekday_text} · {mode_text}
@@ -1545,9 +1922,349 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab_map, tab_groups, tab_plan = st.tabs(
-    ["🗺️ Eczane Haritası", "⭕ Grup Yapısı", "📅 Oluşturulan Plan"]
+tab_demo, tab_map, tab_groups, tab_plan = st.tabs(
+    [
+        "🎬 Sunum Simülasyonu",
+        "🗺️ Eczane Haritası",
+        "⭕ Grup Yapısı",
+        "📅 Oluşturulan Plan",
+    ]
 )
+
+with tab_demo:
+    demo_candidates_by_group: dict[str, pd.DataFrame] = {}
+    demo_selected_ids = list(st.session_state.selected_by_group.values())
+
+    for demo_group in active_groups:
+        demo_candidates_by_group[demo_group] = eligible_candidates(
+            pharmacies=pharmacies,
+            group_name=demo_group,
+            selected_ids=demo_selected_ids,
+            state=state,
+            current_date=current_date,
+            min_distance_km=min_distance_km,
+            min_gap_days=min_gap_days,
+        )
+
+    demo_summary = build_simulation_summary(
+        pharmacies=pharmacies,
+        active_groups=active_groups,
+        selected_by_group=st.session_state.selected_by_group,
+        candidates_by_group=demo_candidates_by_group,
+    )
+
+    st.markdown(
+        f"""
+        <div class="presentation-hero">
+          <div class="presentation-kicker">AYÇA NÖBET · İLK GÖRÜŞME SUNUM MODU</div>
+          <div class="presentation-title">{selected_city} için akıllı nöbet planlama</div>
+          <div class="presentation-subtitle">
+            Grup yapısı, coğrafi dağılım, geçmiş nöbet yükü ve adalet kontrolleri
+            tek karar motorunda birleşir.
+          </div>
+          <div class="presentation-badges">
+            <span class="presentation-badge">🏥 100 Eczane</span>
+            <span class="presentation-badge">🧭 4 Bölge</span>
+            <span class="presentation-badge">⭕ 16 Alt Grup</span>
+            <span class="presentation-badge">📍 Canlı Mesafe Kontrolü</span>
+            <span class="presentation-badge">⚖️ Adalet Odaklı</span>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="showcase-shell">', unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="engine-panel">
+          <div class="engine-content">
+            <div class="engine-eyebrow">AYÇA KARAR MOTORU</div>
+            <div class="engine-title">Nöbet dağılımı hazırlanıyor</div>
+            <div class="engine-subtitle">
+              Aktif grup kombinasyonu içindeki adaylar; minimum mesafe, nöbet aralığı,
+              geçmiş yük, hafta sonu ve bayram dengesi üzerinden birlikte değerlendirilir.
+            </div>
+            <div class="engine-flow">
+              {''.join(f'<span class="engine-node">{group}</span>' for group in active_groups)}
+            </div>
+            <div class="engine-stat-row">
+              <div class="engine-stat">
+                <div class="engine-stat-value">{demo_summary["total_candidates"]}</div>
+                <div class="engine-stat-label">Aday incelendi</div>
+              </div>
+              <div class="engine-stat">
+                <div class="engine-stat-value">{demo_summary["rule_checks"]}</div>
+                <div class="engine-stat-label">Kural kontrolü</div>
+              </div>
+              <div class="engine-stat">
+                <div class="engine-stat-value">{demo_summary["estimated_combinations"]:,}</div>
+                <div class="engine-stat-label">Olası kombinasyon</div>
+              </div>
+              <div class="engine-stat">
+                <div class="engine-stat-value">{demo_summary["fairness_score"]:.1f}</div>
+                <div class="engine-stat-label">Adalet skoru</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.progress(
+        min(
+            1.0,
+            demo_summary["selected_count"]
+            / max(1, demo_summary["active_group_count"]),
+        ),
+        text=(
+            f'{demo_summary["selected_count"]}/{demo_summary["active_group_count"]} '
+            "nöbetçi belirlendi"
+        ),
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown(
+        '<div class="showcase-section-title">Bugünün Nöbetçileri</div>'
+        '<div class="showcase-section-sub">'
+        'Her aktif gruptan seçilen eczaneler tek bakışta gösterilir.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    duty_colors = {
+        "A": "linear-gradient(135deg,#2563EB,#38BDF8)",
+        "B": "linear-gradient(135deg,#059669,#34D399)",
+        "C": "linear-gradient(135deg,#EA580C,#FB923C)",
+        "D": "linear-gradient(135deg,#7C3AED,#A78BFA)",
+    }
+
+    duty_cards = []
+    for demo_group in active_groups:
+        selected_pid = st.session_state.selected_by_group.get(demo_group)
+        selected_name = "Henüz seçilmedi"
+        selected_score = 0.0
+
+        if selected_pid is not None:
+            selected_match = demo_candidates_by_group[demo_group].loc[
+                demo_candidates_by_group[demo_group]["pharmacy_id"].astype(int)
+                == int(selected_pid)
+            ]
+            if not selected_match.empty:
+                selected_name = str(selected_match.iloc[0]["pharmacy_name"])
+                selected_score = float(selected_match.iloc[0]["decision_score"])
+
+        duty_cards.append(
+            dedent(
+                f"""
+                <div class="duty-card" style="background:{duty_colors[demo_group[0]]};">
+                  <div class="duty-group">{demo_group} GRUBU</div>
+                  <div class="duty-name">{selected_name}</div>
+                  <div class="duty-score">Uygunluk skoru %{selected_score:.0f}</div>
+                  <div class="duty-status">
+                    {'✓ Seçildi' if selected_pid is not None else '… Atama bekleniyor'}
+                  </div>
+                </div>
+                """
+            ).strip()
+        )
+
+    duty_cards_html = "".join(duty_cards)
+    st.markdown(
+        f'<div class="duty-grid">{duty_cards_html}</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<br><div class="showcase-section-title">AYÇA Nasıl Çalışır?</div>'
+        '<div class="showcase-section-sub">'
+        'Karmaşık nöbet planlaması altı anlaşılır adımda tamamlanır.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <div class="process-line">
+          <div class="process-step">
+            <div class="process-no">1</div><div class="process-icon">📍</div>
+            <div class="process-title">Koordinatlar Okunur</div>
+            <div class="process-text">Eczanelerin coğrafi konumu sisteme aktarılır.</div>
+          </div>
+          <div class="process-step">
+            <div class="process-no">2</div><div class="process-icon">⭕</div>
+            <div class="process-title">Gruplar Oluşturulur</div>
+            <div class="process-text">Bölge ve eşlenik yapı dengeli biçimde modellenir.</div>
+          </div>
+          <div class="process-step">
+            <div class="process-no">3</div><div class="process-icon">📅</div>
+            <div class="process-title">Geçmiş İncelenir</div>
+            <div class="process-text">Son nöbet, hafta sonu ve bayram yükü okunur.</div>
+          </div>
+          <div class="process-step">
+            <div class="process-no">4</div><div class="process-icon">🧠</div>
+            <div class="process-title">Kurallar Uygulanır</div>
+            <div class="process-text">Mesafe, aralık ve grup şartları kontrol edilir.</div>
+          </div>
+          <div class="process-step">
+            <div class="process-no">5</div><div class="process-icon">⚖️</div>
+            <div class="process-title">Adalet Hesaplanır</div>
+            <div class="process-text">Görev yükü ve zor gün dağılımı puanlanır.</div>
+          </div>
+          <div class="process-step">
+            <div class="process-no">6</div><div class="process-icon">✅</div>
+            <div class="process-title">Plan Oluşturulur</div>
+            <div class="process-text">En uygun nöbetçiler açıklamalı biçimde sunulur.</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<br><div class="showcase-section-title">Platformun Gücü</div>'
+        '<div class="showcase-section-sub">'
+        'İlk görüşmede anlatılması gereken dört temel değer.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <div class="capability-grid">
+          <div class="capability-card cap-blue">
+            <div class="capability-inner">
+              <div class="capability-icon">🧠</div>
+              <div class="capability-title">Akıllı Karar Motoru</div>
+              <div class="capability-text">
+                Adayları tek tek değil, tüm kurallarla birlikte değerlendirir ve
+                en uygun dağılımı önerir.
+              </div>
+            </div>
+          </div>
+          <div class="capability-card cap-purple">
+            <div class="capability-inner">
+              <div class="capability-icon">🗺️</div>
+              <div class="capability-title">Coğrafi Analiz</div>
+              <div class="capability-text">
+                Bölge, grup, koordinat ve minimum mesafe kuralları harita üzerinde
+                canlı olarak kontrol edilir.
+              </div>
+            </div>
+          </div>
+          <div class="capability-card cap-green">
+            <div class="capability-inner">
+              <div class="capability-icon">⚖️</div>
+              <div class="capability-title">Adalet Motoru</div>
+              <div class="capability-text">
+                Geçmiş yük, hafta sonu, bayram ve nöbet aralığı dengesi aynı
+                puanlama yapısında birleşir.
+              </div>
+            </div>
+          </div>
+          <div class="capability-card cap-orange">
+            <div class="capability-inner">
+              <div class="capability-icon">⚡</div>
+              <div class="capability-title">Hızlı Yeniden Planlama</div>
+              <div class="capability-text">
+                Değişiklik veya mazeret durumunda plan, geçerli kurallar korunarak
+                saniyeler içinde yeniden oluşturulur.
+              </div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<br><div class="showcase-section-title">AYÇA Avantajları</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <div class="advantage-strip">
+          <div class="advantage-item"><span class="advantage-check">✓</span>Adil dağılım</div>
+          <div class="advantage-item"><span class="advantage-check">✓</span>Kuralların otomatik kontrolü</div>
+          <div class="advantage-item"><span class="advantage-check">✓</span>Saniyeler içinde plan</div>
+          <div class="advantage-item"><span class="advantage-check">✓</span>Tek tıkla yeniden hesaplama</div>
+          <div class="advantage-item"><span class="advantage-check">✓</span>Şehre özel uyarlama</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<br><div class="showcase-section-title">Performans Özeti</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"""
+        <div class="performance-grid">
+          <div class="performance-card">
+            <div class="performance-value">{demo_summary["total_candidates"]}</div>
+            <div class="performance-label">Aday değerlendirildi</div>
+          </div>
+          <div class="performance-card">
+            <div class="performance-value">{demo_summary["rule_checks"]}</div>
+            <div class="performance-label">Kural kontrolü</div>
+          </div>
+          <div class="performance-card">
+            <div class="performance-value">{demo_summary["estimated_combinations"]:,}</div>
+            <div class="performance-label">Olası kombinasyon</div>
+          </div>
+          <div class="performance-card">
+            <div class="performance-value">{demo_summary["selected_count"]}</div>
+            <div class="performance-label">Nöbetçi belirlendi</div>
+          </div>
+          <div class="performance-card">
+            <div class="performance-value">{demo_summary["estimated_seconds"]:.1f} sn</div>
+            <div class="performance-label">Tahmini çalışma süresi</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Karar hikâyesi ilk akıştan çıkarıldı; yalnızca merak eden için detay olarak açılır.
+    with st.expander("🔍 Seçimlerin karar detaylarını incele"):
+        st.markdown(
+            '<div class="story-expander-note">'
+            'Bu bölüm teknik detay talep edildiğinde açılır. Her grubun aday sayısı, '
+            'elenme gerekçeleri ve önerilen eczanesi burada gösterilir.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        story_columns = st.columns(2)
+        for story_index, demo_group in enumerate(active_groups):
+            story = build_group_story(
+                group_name=demo_group,
+                candidates=demo_candidates_by_group[demo_group],
+                selected_pharmacy_id=st.session_state.selected_by_group.get(
+                    demo_group
+                ),
+            )
+            with story_columns[story_index % 2]:
+                with st.container(border=True):
+                    st.markdown(f"#### {story['group']} Grubu")
+                    st.caption(
+                        f"{story['candidate_count']} aday · "
+                        f"{story['blocked_count']} elendi · "
+                        f"{story['selectable_count']} uygun"
+                    )
+                    st.markdown(
+                        f"**Önerilen:** {story['selected_name']} "
+                        f"— %{story['selected_score']:.0f}"
+                    )
+                    for reason_item in story["reasons"][:3]:
+                        st.write(
+                            f"❌ {reason_item['pharmacy_name']}: "
+                            f"{reason_item['reason']}"
+                        )
+
+    st.info(
+        f"Bu ekran {selected_city} için 100 sentetik eczane ile hazırlanmış "
+        "ilk görüşme simülasyonudur. Gerçek kurulumda odanın gerçek eczaneleri, "
+        "koordinatları, geçmiş nöbetleri ve yerel kuralları kullanılır."
+    )
 
 with tab_map:
     st.markdown(
@@ -1634,6 +2351,8 @@ with tab_map:
             selected_df=selected_df,
             min_distance_km=min_distance_km,
             active_groups=active_groups,
+            center_lat=city_center_lat,
+            center_lon=city_center_lon,
         )
 
         map_event = st_folium(
@@ -1641,7 +2360,7 @@ with tab_map:
             height=610,
             use_container_width=True,
             returned_objects=["last_object_clicked_tooltip"],
-            key=f"ayca_map_{day_no}_{len(selected_ids)}",
+            key=f"ayca_map_{city_slug(selected_city)}_{day_no}_{len(selected_ids)}",
         )
 
         clicked_id = clicked_pharmacy_id(map_event)
@@ -2136,5 +2855,5 @@ with tab_plan:
         )
 
 st.caption(
-    "Not: Bu demo sentetik eczane ve koordinat verileri kullanır. Gerçek kurulumda oda tarafından sağlanan grup, koordinat ve geçmiş nöbet verileri sisteme aktarılır."
+    f"Not: {selected_city} demosu 100 sentetik eczane ve örnek koordinat kullanır. Gerçek kurulumda oda tarafından sağlanan grup, koordinat ve geçmiş nöbet verileri sisteme aktarılır."
 )
