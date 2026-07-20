@@ -1,37 +1,32 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 import copy
 import math
 import random
+from typing import Iterable
 
 import pandas as pd
 
-
-# ==========================================================
-# DEMO COĞRAFİ YERLEŞİM SABİTLERİ
-# ==========================================================
-DEMO_LAYOUT_VERSION = 7
+DEMO_LAYOUT_VERSION = 6
 
 CITY_CONFIG = {
-    "Uşak": {"lat": 38.6742, "lon": 29.4058, "default_pharmacy_count": 75, "profile": "İç Ege", "layout": "Dairesel"},
-    "Giresun": {"lat": 40.9025, "lon": 38.3895, "default_pharmacy_count": 100, "profile": "Karadeniz kıyı", "layout": "Kıyı koridoru", "center_note": "Demo merkezi şehir dokusunu daha iyi kapsayacak şekilde kuzeye taşındı"},
-    "Erzurum": {"lat": 39.9043, "lon": 41.2679, "default_pharmacy_count": 154, "profile": "Geniş coğrafya", "layout": "Dairesel"},
-    "Kahramanmaraş": {"lat": 37.5753, "lon": 36.9228, "default_pharmacy_count": 210, "profile": "Büyükşehir", "layout": "Dairesel"},
-    "Sivas": {"lat": 39.7505, "lon": 37.0150, "default_pharmacy_count": 120, "profile": "İç Anadolu", "layout": "Dairesel"},
-    "Tokat": {"lat": 40.3167, "lon": 36.5500, "default_pharmacy_count": 90, "profile": "Orta Karadeniz", "layout": "Dairesel"},
-    "Amasya": {"lat": 40.6539, "lon": 35.8331, "default_pharmacy_count": 75, "profile": "Vadi yerleşimi", "layout": "Dairesel"},
-    "Ordu": {"lat": 40.9565, "lon": 37.8764, "default_pharmacy_count": 110, "profile": "Karadeniz kıyı", "layout": "Dairesel"},
-    "Trabzon": {"lat": 40.9740, "lon": 39.7178, "default_pharmacy_count": 154, "profile": "Karadeniz kıyı", "layout": "Dairesel"},
-    "Rize": {"lat": 40.9920, "lon": 40.5234, "default_pharmacy_count": 85, "profile": "Karadeniz kıyı", "layout": "Dairesel"},
+    "Uşak": {"lat": 38.6742, "lon": 29.4058, "default_pharmacy_count": 100, "layout": "Dairesel", "profile": "İç Ege şehir profili"},
+    "Giresun": {"lat": 40.9170, "lon": 38.3895, "default_pharmacy_count": 100, "layout": "Kıyı odaklı", "profile": "Karadeniz kıyı profili"},
+    "Erzurum": {"lat": 39.9043, "lon": 41.2679, "default_pharmacy_count": 154, "layout": "Geniş merkez", "profile": "Doğu Anadolu şehir profili"},
+    "Kahramanmaraş": {"lat": 37.5753, "lon": 36.9228, "default_pharmacy_count": 150, "layout": "Çok merkezli", "profile": "Büyükşehir profili"},
+    "Sivas": {"lat": 39.7505, "lon": 37.0150, "default_pharmacy_count": 125, "layout": "Dairesel", "profile": "İç Anadolu şehir profili"},
+    "Tokat": {"lat": 40.3167, "lon": 36.5500, "default_pharmacy_count": 100, "layout": "Dairesel", "profile": "Orta Karadeniz profili"},
+    "Amasya": {"lat": 40.6539, "lon": 35.8331, "default_pharmacy_count": 75, "layout": "Vadi odaklı", "profile": "Vadi şehir profili"},
+    "Ordu": {"lat": 40.9565, "lon": 37.8764, "default_pharmacy_count": 125, "layout": "Kıyı odaklı", "profile": "Karadeniz kıyı profili"},
+    "Trabzon": {"lat": 40.9740, "lon": 39.7178, "default_pharmacy_count": 175, "layout": "Kıyı odaklı", "profile": "Büyük kıyı şehir profili"},
+    "Rize": {"lat": 40.9920, "lon": 40.5234, "default_pharmacy_count": 100, "layout": "Kıyı odaklı", "profile": "Karadeniz kıyı profili"},
 }
 
 DEMO_CENTER_LAT = CITY_CONFIG["Uşak"]["lat"]
 DEMO_CENTER_LON = CITY_CONFIG["Uşak"]["lon"]
 
-# Dört ana bölge tam 90 derecelik sektörlerdir.
-# A: kuzeybatı, B: güneybatı, C: güneydoğu, D: kuzeydoğu.
 REGION_ANGLES = {
     "A": (90.0, 180.0),
     "B": (180.0, 270.0),
@@ -39,30 +34,6 @@ REGION_ANGLES = {
     "D": (0.0, 90.0),
 }
 
-
-# Kıyı şehirlerinde tam dairesel yerleşim denize taşabilir.
-# Giresun için gruplar batı-güney-doğu yönündeki kara koridoruna yayılır.
-CITY_REGION_ANGLES = {
-    "Giresun": {
-        "A": (165.0, 210.0),
-        "B": (210.0, 255.0),
-        "C": (255.0, 300.0),
-        "D": (300.0, 345.0),
-    },
-}
-
-
-def region_angles_for_city(city_name: str) -> dict[str, tuple[float, float]]:
-    """Şehre özel sektör açılarını döndürür."""
-    normalized = str(city_name or "").strip().casefold()
-
-    for configured_city, angles in CITY_REGION_ANGLES.items():
-        if configured_city.casefold() == normalized:
-            return angles
-
-    return REGION_ANGLES
-
-# Haritada çizilen ve veri üretiminde kullanılan ortak halka sınırları.
 RING_LIMITS_KM = {
     1: (0.35, 1.45),
     2: (1.45, 2.45),
@@ -70,12 +41,9 @@ RING_LIMITS_KM = {
     4: (3.45, 4.45),
 }
 
-# Eczaneler sektör kenarlarına yapışmasın diye iç marj.
-SECTOR_MARGIN_DEG = 12.0
-RING_MARGIN_KM = 0.16
+SECTOR_MARGIN_DEG = 10.0
+RING_MARGIN_KM = 0.12
 
-
-# 8 günlük dengeli eşlenik rotasyon.
 KOMB_ABC = [
     ("A1", "B2", "C3", "D4"),
     ("A2", "B3", "C4", "D1"),
@@ -89,21 +57,28 @@ KOMB_ABC = [
 
 
 def group_for_day(day_index: int) -> tuple[str, str, str, str]:
-    return KOMB_ABC[day_index % len(KOMB_ABC)]
+    return KOMB_ABC[int(day_index) % len(KOMB_ABC)]
+
+
+def region_angles_for_city(city_name: str) -> dict[str, tuple[float, float]]:
+    """Giresun gibi kıyı şehirlerinde görünümü kuzeye taşıyan açısal profil."""
+    if city_name in {"Giresun", "Ordu", "Trabzon", "Rize"}:
+        return {
+            "A": (55.0, 145.0),
+            "B": (145.0, 235.0),
+            "C": (235.0, 325.0),
+            "D": (325.0, 415.0),
+        }
+    return REGION_ANGLES.copy()
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    radius_km = 6371.0088
-    p1 = math.radians(lat1)
-    p2 = math.radians(lat2)
-    delta_p = math.radians(lat2 - lat1)
-    delta_l = math.radians(lon2 - lon1)
-
-    value = (
-        math.sin(delta_p / 2) ** 2
-        + math.cos(p1) * math.cos(p2) * math.sin(delta_l / 2) ** 2
-    )
-    return radius_km * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+    radius = 6371.0088
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return radius * 2 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1 - a)))
 
 
 @dataclass
@@ -113,172 +88,43 @@ class SimulationState:
 
     @classmethod
     def from_dataframe(cls, pharmacies: pd.DataFrame) -> "SimulationState":
-        last_duty = {}
-        assignment_count = {}
-
+        last_duty: dict[int, date | None] = {}
+        counts: dict[int, int] = {}
         for row in pharmacies.itertuples():
-            raw_date = getattr(row, "last_duty_date", None)
+            pid = int(row.pharmacy_id)
+            raw = getattr(row, "last_duty_date", None)
             parsed_date = None
-            if raw_date is not None and not pd.isna(raw_date) and str(raw_date).strip():
-                parsed = pd.to_datetime(raw_date, errors="coerce")
+            if raw is not None and not pd.isna(raw) and str(raw).strip():
+                parsed = pd.to_datetime(raw, errors="coerce")
                 if not pd.isna(parsed):
                     parsed_date = parsed.date()
-
-            pharmacy_id = int(row.pharmacy_id)
-            last_duty[pharmacy_id] = parsed_date
-            assignment_count[pharmacy_id] = int(
-                getattr(row, "assignment_count", 0) or 0
-            )
-
-        return cls(
-            last_duty_by_id=last_duty,
-            assignment_count_by_id=assignment_count,
-        )
+            last_duty[pid] = parsed_date
+            counts[pid] = int(getattr(row, "assignment_count", 0) or 0)
+        return cls(last_duty, counts)
 
     def copy(self) -> "SimulationState":
         return copy.deepcopy(self)
 
     def apply_assignment(self, pharmacy_id: int, duty_date: date) -> None:
-        pharmacy_id = int(pharmacy_id)
-        self.last_duty_by_id[pharmacy_id] = duty_date
-        self.assignment_count_by_id[pharmacy_id] = (
-            self.assignment_count_by_id.get(pharmacy_id, 0) + 1
-        )
+        pid = int(pharmacy_id)
+        self.last_duty_by_id[pid] = duty_date
+        self.assignment_count_by_id[pid] = self.assignment_count_by_id.get(pid, 0) + 1
 
 
-def _destination_point(
-    center_lat: float,
-    center_lon: float,
-    distance_km: float,
-    angle_deg: float,
-) -> tuple[float, float]:
-    angle_rad = math.radians(angle_deg)
-    north_km = distance_km * math.sin(angle_rad)
-    east_km = distance_km * math.cos(angle_rad)
-
-    lat = center_lat + north_km / 111.32
-    lon = center_lon + east_km / (
-        111.32 * math.cos(math.radians(center_lat))
-    )
+def _destination_point(center_lat: float, center_lon: float, distance_km: float, angle_deg: float) -> tuple[float, float]:
+    angle = math.radians(angle_deg)
+    north = distance_km * math.sin(angle)
+    east = distance_km * math.cos(angle)
+    lat = center_lat + north / 111.32
+    lon = center_lon + east / (111.32 * max(0.2, math.cos(math.radians(center_lat))))
     return lat, lon
 
 
-def _bearing_deg(
-    center_lat: float,
-    center_lon: float,
-    lat: float,
-    lon: float,
-) -> float:
-    north_km = (lat - center_lat) * 111.32
-    east_km = (
-        (lon - center_lon)
-        * 111.32
-        * math.cos(math.radians(center_lat))
-    )
-    return math.degrees(math.atan2(north_km, east_km)) % 360.0
-
-
-def pharmacy_layout_is_valid(
-    pharmacies: pd.DataFrame,
-    center_lat: float = DEMO_CENTER_LAT,
-    center_lon: float = DEMO_CENTER_LON,
-    expected_total: int = 100,
-    city_name: str | None = None,
-) -> bool:
-    required_columns = {
-        "pharmacy_id",
-        "group",
-        "region",
-        "ring",
-        "lat",
-        "lon",
-        "layout_version",
-    }
-    if not required_columns.issubset(pharmacies.columns):
-        return False
-
-    if pharmacies.empty or len(pharmacies) != expected_total:
-        return False
-
-    try:
-        versions = pharmacies["layout_version"].astype(int).unique().tolist()
-    except (TypeError, ValueError):
-        return False
-
-    if versions != [DEMO_LAYOUT_VERSION]:
-        return False
-
-    expected_groups = {
-        f"{region}{ring_no}"
-        for region in ("A", "B", "C", "D")
-        for ring_no in range(1, 5)
-    }
-    counts = pharmacies.groupby("group").size().to_dict()
-    if set(counts) != expected_groups:
-        return False
-
-    # Her toplam sayı 16 alt gruba mümkün olduğunca dengeli dağıtılır.
-    base_count, remainder = divmod(int(expected_total), len(expected_groups))
-    expected_sizes = sorted(
-        [base_count + 1] * remainder
-        + [base_count] * (len(expected_groups) - remainder)
-    )
-    group_sizes = sorted(int(value) for value in counts.values())
-    if group_sizes != expected_sizes:
-        return False
-
-    tolerance_km = 0.04
-    tolerance_deg = 0.8
-
-    resolved_city = city_name
-    if resolved_city is None and "city" in pharmacies.columns and not pharmacies.empty:
-        resolved_city = str(pharmacies.iloc[0]["city"])
-
-    region_angles = region_angles_for_city(resolved_city or "")
-
-    for row in pharmacies.itertuples():
-        region = str(row.region)
-        ring_no = int(row.ring)
-        group_name = str(row.group)
-
-        if group_name != f"{region}{ring_no}":
-            return False
-        if region not in region_angles or ring_no not in RING_LIMITS_KM:
-            return False
-
-        distance_km = haversine_km(
-            center_lat,
-            center_lon,
-            float(row.lat),
-            float(row.lon),
-        )
-        inner_km, outer_km = RING_LIMITS_KM[ring_no]
-        if not (
-            inner_km + RING_MARGIN_KM - tolerance_km
-            <= distance_km
-            <= outer_km - RING_MARGIN_KM + tolerance_km
-        ):
-            return False
-
-        bearing = _bearing_deg(
-            center_lat,
-            center_lon,
-            float(row.lat),
-            float(row.lon),
-        )
-        start_angle, end_angle = region_angles[region]
-
-        if end_angle > 360 and bearing < start_angle:
-            bearing += 360
-
-        if not (
-            start_angle + SECTOR_MARGIN_DEG - tolerance_deg
-            <= bearing
-            <= end_angle - SECTOR_MARGIN_DEG + tolerance_deg
-        ):
-            return False
-
-    return True
+def _balanced_group_counts(total: int) -> dict[str, int]:
+    groups = [f"{r}{i}" for r in "ABCD" for i in range(1, 5)]
+    total = max(16, int(total))
+    base, remainder = divmod(total, len(groups))
+    return {g: base + (1 if i < remainder else 0) for i, g in enumerate(groups)}
 
 
 def generate_pharmacies(
@@ -289,484 +135,207 @@ def generate_pharmacies(
     total_pharmacies: int = 100,
     realistic: bool = True,
 ) -> pd.DataFrame:
-    """
-    İstenen toplam eczane sayısını 4 ana bölge × 4 halka = 16 alt gruba
-    mümkün olduğunca dengeli dağıtarak sentetik demo üretir.
-    """
-    total_pharmacies = int(total_pharmacies)
-    if total_pharmacies < 16:
-        raise ValueError("Toplam eczane sayısı en az 16 olmalıdır.")
+    total_pharmacies = max(16, int(total_pharmacies))
+    rng = random.Random(f"{seed}|{city_name}|{total_pharmacies}|{realistic}")
+    counts = _balanced_group_counts(total_pharmacies)
+    angles = region_angles_for_city(city_name)
+    rows: list[dict] = []
+    pid = 1
+    reference = date(2026, 8, 1)
 
-    rng = random.Random(seed)
-    rows = []
-    pharmacy_id = 1
-    reference_date = pd.Timestamp("2026-08-01")
-
-    group_names = [
-        f"{region}{ring_no}"
-        for region in ("A", "B", "C", "D")
-        for ring_no in range(1, 5)
-    ]
-    base_count, remainder = divmod(total_pharmacies, len(group_names))
-    group_counts = {
-        group_name: base_count + (1 if index < remainder else 0)
-        for index, group_name in enumerate(group_names)
-    }
-
-    region_angles = region_angles_for_city(city_name)
-
-    for region in ("A", "B", "C", "D"):
-        sector_start, sector_end = region_angles[region]
-        usable_start = sector_start + SECTOR_MARGIN_DEG
-        usable_end = sector_end - SECTOR_MARGIN_DEG
-
-        for ring_no in range(1, 5):
-            subgroup = f"{region}{ring_no}"
-            subgroup_count = group_counts[subgroup]
-            inner_km, outer_km = RING_LIMITS_KM[ring_no]
-            safe_inner = inner_km + RING_MARGIN_KM
-            safe_outer = outer_km - RING_MARGIN_KM
-
-            for local_index in range(subgroup_count):
-                fraction = (local_index + 1) / (subgroup_count + 1)
+    for region in "ABCD":
+        start, end = angles[region]
+        for ring in range(1, 5):
+            group = f"{region}{ring}"
+            count = counts[group]
+            inner, outer = RING_LIMITS_KM[ring]
+            for local_index in range(count):
+                fraction = (local_index + 1) / (count + 1)
+                angle = start + SECTOR_MARGIN_DEG + (end - start - 2 * SECTOR_MARGIN_DEG) * fraction
                 if realistic:
-                    # Gerçekçi modda eczaneler kusursuz bir ızgara yerine
-                    # şehir dokusuna benzer biçimde küçük kümeler oluşturur.
-                    clustered_fraction = 0.5 + (fraction - 0.5) * 0.82
-                    base_angle = usable_start + (usable_end - usable_start) * clustered_fraction
-                    angle_deg = base_angle + rng.uniform(-4.2, 4.2)
+                    angle += rng.uniform(-4.0, 4.0)
+                    radial = rng.triangular(inner + RING_MARGIN_KM, outer - RING_MARGIN_KM, (inner + outer) / 2)
                 else:
-                    base_angle = usable_start + (usable_end - usable_start) * fraction
-                    angle_deg = base_angle + rng.uniform(-1.2, 1.2)
+                    angle += rng.uniform(-1.5, 1.5)
+                    radial = inner + RING_MARGIN_KM + (outer - inner - 2 * RING_MARGIN_KM) * fraction
+                lat, lon = _destination_point(center_lat, center_lon, radial, angle)
+                load = round(rng.uniform(1.5, 9.5), 1)
+                weekend = rng.randint(0, 3)
+                holiday = rng.randint(0, 2)
+                days_ago = rng.randint(8, 55)
+                rows.append({
+                    "pharmacy_id": pid,
+                    "pharmacy_name": f"{city_name} Eczanesi {pid:03d}",
+                    "city_name": city_name,
+                    "group": group,
+                    "region": region,
+                    "ring": ring,
+                    "lat": lat,
+                    "lon": lon,
+                    "historical_load": load,
+                    "weekend_count": weekend,
+                    "holiday_count": holiday,
+                    "assignment_count": rng.randint(0, 6),
+                    "last_duty_date": (reference - timedelta(days=days_ago)).isoformat(),
+                    "layout_version": DEMO_LAYOUT_VERSION,
+                })
+                pid += 1
+    return pd.DataFrame(rows)
 
-                radial_fraction = (
-                    ((local_index * 2) % subgroup_count) + 1
-                ) / (subgroup_count + 1)
-                if realistic:
-                    radial_fraction = 0.16 + 0.84 * (radial_fraction ** 1.22)
-                base_distance = safe_inner + (
-                    safe_outer - safe_inner
-                ) * radial_fraction
-                jitter = 0.105 if realistic else 0.035
-                distance_km = base_distance + rng.uniform(-jitter, jitter)
-                distance_km = min(
-                    safe_outer - 0.01,
-                    max(safe_inner + 0.01, distance_km),
-                )
 
-                lat, lon = _destination_point(
-                    center_lat,
-                    center_lon,
-                    distance_km,
-                    angle_deg,
-                )
+def pharmacy_layout_is_valid(
+    pharmacies: pd.DataFrame,
+    center_lat: float = DEMO_CENTER_LAT,
+    center_lon: float = DEMO_CENTER_LON,
+    expected_total: int = 100,
+    city_name: str | None = None,
+) -> bool:
+    required = {"pharmacy_id", "group", "region", "ring", "lat", "lon", "layout_version"}
+    if pharmacies.empty or len(pharmacies) != int(expected_total) or not required.issubset(pharmacies.columns):
+        return False
+    try:
+        if set(pharmacies["layout_version"].astype(int)) != {DEMO_LAYOUT_VERSION}:
+            return False
+    except Exception:
+        return False
+    expected_groups = {f"{r}{i}" for r in "ABCD" for i in range(1, 5)}
+    if set(pharmacies["group"].astype(str)) != expected_groups:
+        return False
+    sizes = pharmacies.groupby("group").size()
+    return int(sizes.max() - sizes.min()) <= 1
 
-                days_since_last = rng.randint(16, 45)
-                historical_load = round(rng.uniform(2.8, 6.8), 1)
-                weekend_count = rng.randint(0, 3)
-                holiday_count = rng.randint(0, 1)
 
-                rows.append(
-                    {
-                        "pharmacy_id": pharmacy_id,
-                        "pharmacy_name": f"Eczane {pharmacy_id}",
-                        "city": city_name,
-                        "region": region,
-                        "ring": ring_no,
-                        "group": subgroup,
-                        "lat": round(lat, 6),
-                        "lon": round(lon, 6),
-                        "distance_from_center_km": round(distance_km, 3),
-                        "bearing_deg": round(angle_deg % 360.0, 2),
-                        "layout_version": DEMO_LAYOUT_VERSION,
-                        "historical_load": historical_load,
-                        "weekend_count": weekend_count,
-                        "holiday_count": holiday_count,
-                        "assignment_count": rng.randint(2, 5),
-                        "last_duty_date": (
-                            reference_date - pd.Timedelta(days=days_since_last)
-                        ).date().isoformat(),
-                    }
-                )
-                pharmacy_id += 1
-
-    generated = pd.DataFrame(rows)
-    if not pharmacy_layout_is_valid(
-        generated,
-        center_lat=center_lat,
-        center_lon=center_lon,
-        expected_total=total_pharmacies,
-        city_name=city_name,
-    ):
-        raise RuntimeError("Demo eczane yerleşimi doğrulamasını geçemedi.")
-    return generated
+def _nearest_distance(row: pd.Series, selected_rows: pd.DataFrame) -> float | None:
+    if selected_rows.empty:
+        return None
+    return min(
+        haversine_km(float(row.lat), float(row.lon), float(s.lat), float(s.lon))
+        for s in selected_rows.itertuples()
+    )
 
 
 def eligible_candidates(
     pharmacies: pd.DataFrame,
     group_name: str,
-    selected_ids: list[int],
+    selected_ids: Iterable[int],
     state: SimulationState,
     current_date: date,
     min_distance_km: float,
     min_gap_days: int,
 ) -> pd.DataFrame:
-    selected_ids = [int(value) for value in selected_ids]
-    selected_rows = pharmacies[
-        pharmacies["pharmacy_id"].astype(int).isin(selected_ids)
-    ]
+    selected_set = {int(x) for x in selected_ids}
+    selected_rows = pharmacies[pharmacies["pharmacy_id"].astype(int).isin(selected_set)]
+    frame = pharmacies[pharmacies["group"].astype(str).str.upper() == str(group_name).upper()].copy()
+    results: list[dict] = []
 
-    normalized_group_name = str(group_name).strip().upper()
+    for _, row in frame.iterrows():
+        pid = int(row["pharmacy_id"])
+        last = state.last_duty_by_id.get(pid)
+        gap = (current_date - last).days if last else 999
+        distance = _nearest_distance(row, selected_rows)
+        distance_ok = distance is None or distance >= float(min_distance_km)
+        gap_ok = gap >= int(min_gap_days)
+        already_selected = pid in selected_set
+        selectable = distance_ok and gap_ok and not already_selected
 
-    result = pharmacies[
-        pharmacies["group"].astype(str).str.strip().str.upper()
-        == normalized_group_name
-    ].copy()
-
-    # Güvenlik kilidi: bu fonksiyon hiçbir koşulda başka gruptan
-    # eczane döndürmez.
-    if not result.empty:
-        result = result[
-            result["group"].astype(str).str.strip().str.upper()
-            == normalized_group_name
-        ].copy()
-
-    distances = []
-    gaps = []
-    statuses = []
-    reasons = []
-    selectable_values = []
-    scores = []
-
-    for row in result.itertuples():
-        pharmacy_id = int(row.pharmacy_id)
-
-        nearest_distance = None
-        if not selected_rows.empty:
-            nearest_distance = min(
-                haversine_km(
-                    float(row.lat),
-                    float(row.lon),
-                    float(selected.lat),
-                    float(selected.lon),
-                )
-                for selected in selected_rows.itertuples()
-            )
-
-        last_duty = state.last_duty_by_id.get(pharmacy_id)
-        days_since_last = (
-            (current_date - last_duty).days
-            if last_duty is not None
-            else 999
-        )
-
-        gap_ok = days_since_last >= min_gap_days
-        distance_ok = (
-            nearest_distance is None
-            or nearest_distance >= min_distance_km
-        )
-
-        is_selected = pharmacy_id in selected_ids
-        selectable = gap_ok and distance_ok and not is_selected
-
-        if is_selected:
-            status = "selected"
-            reason = "Bugünkü plan için seçildi"
-        elif not gap_ok:
-            status = "gap_blocked"
-            reason = f"Son nöbetinden yalnızca {days_since_last} gün geçti"
+        if already_selected:
+            status, reason = "selected", "Bu gün için seçildi"
         elif not distance_ok:
-            status = "distance_blocked"
-            reason = (
-                f"Seçili eczaneye {nearest_distance:.2f} km uzaklıkta; "
-                f"minimum {min_distance_km:.2f} km gerekli"
-            )
+            status, reason = "distance_blocked", f"Seçili eczaneye {distance:.2f} km mesafede"
+        elif not gap_ok:
+            status, reason = "gap_blocked", f"Son nöbetten yalnızca {gap} gün geçti"
         else:
-            status = "selectable"
-            reason = "Tüm temel kurallara uygun"
+            status, reason = "selectable", "Tüm temel kurallara uygun"
 
-        historical_load = float(getattr(row, "historical_load", 0) or 0)
-        weekend_count = int(getattr(row, "weekend_count", 0) or 0)
-        holiday_count = int(getattr(row, "holiday_count", 0) or 0)
-        assignment_count = state.assignment_count_by_id.get(pharmacy_id, 0)
-
+        historical = float(row.get("historical_load", 0) or 0)
+        weekend = int(row.get("weekend_count", 0) or 0)
+        holiday = int(row.get("holiday_count", 0) or 0)
+        assignment_count = state.assignment_count_by_id.get(pid, int(row.get("assignment_count", 0) or 0))
         score = 100.0
-        score -= historical_load * 2.4
-        score -= weekend_count * 3.2
-        score -= holiday_count * 4.5
-        score -= assignment_count * 1.3
-        score += min(days_since_last, 45) * 0.35
-
-        if nearest_distance is not None:
-            score += min(nearest_distance, 4.0) * 1.4
-
-        if not gap_ok:
-            score -= 35
-        if not distance_ok:
-            score -= 40
-        if is_selected:
-            score = max(score, 85)
-
+        score -= min(30.0, historical * 2.0)
+        score -= min(12.0, weekend * 3.0)
+        score -= min(10.0, holiday * 4.0)
+        score -= min(14.0, assignment_count * 2.0)
+        if gap < 999:
+            score += min(12.0, max(0.0, (gap - min_gap_days) * 0.35))
+        if distance is not None:
+            score += min(8.0, distance * 1.5)
+        if not selectable and not already_selected:
+            score = min(score, 55.0)
         score = max(0.0, min(100.0, score))
 
-        distances.append(nearest_distance)
-        gaps.append(days_since_last)
-        statuses.append(status)
-        reasons.append(reason)
-        selectable_values.append(selectable)
-        scores.append(round(score, 2))
-
-    result["distance_to_nearest_selected_km"] = distances
-    result["days_since_last_duty"] = gaps
-    result["status"] = statuses
-    result["reason"] = reasons
-    result["selectable"] = selectable_values
-    result["decision_score"] = scores
-    result["requested_group"] = normalized_group_name
-
-    # Son güvenlik kontrolü.
-    invalid_group_rows = result[
-        result["group"].astype(str).str.strip().str.upper()
-        != normalized_group_name
-    ]
-    if not invalid_group_rows.empty:
-        raise ValueError(
-            f"{normalized_group_name} aday listesine başka gruptan "
-            "eczane karıştı."
-        )
-
-    return result
+        item = row.to_dict()
+        item.update({
+            "status": status,
+            "reason": reason,
+            "selectable": selectable,
+            "days_since_last_duty": gap if gap < 999 else None,
+            "distance_to_nearest_selected_km": distance,
+            "decision_score": round(score, 1),
+            "assignment_count": assignment_count,
+        })
+        results.append(item)
+    return pd.DataFrame(results)
 
 
 def status_palette() -> dict[str, list[int]]:
     return {
-        "selected": [37, 99, 235, 220],
-        "selectable": [22, 163, 74, 210],
-        "distance_blocked": [220, 38, 38, 190],
+        "selected": [47, 107, 255, 220],
+        "selectable": [34, 197, 94, 205],
+        "distance_blocked": [239, 68, 68, 190],
         "gap_blocked": [245, 158, 11, 190],
-        "inactive": [148, 163, 184, 110],
+        "inactive": [148, 163, 184, 125],
     }
 
 
-def build_group_svg(
-    pharmacies: pd.DataFrame,
-    active_combo: tuple[str, str, str, str],
-    selected_by_group: dict,
-) -> str:
-    width = 980
-    height = 720
-    cx = 390
-    cy = 350
-    radii = [72, 132, 196, 260]
-    region_colors = {
-        "A": "#38A3E1",
-        "B": "#16C96F",
-        "C": "#F39ACD",
-        "D": "#B444ED",
-    }
-
-    region_angles = {
-        "A": (180, 270),
-        "B": (90, 180),
-        "C": (0, 90),
-        "D": (270, 360),
-    }
-
-    def polar(radius: float, angle_deg: float) -> tuple[float, float]:
-        angle = math.radians(angle_deg)
-        return (
-            cx + radius * math.cos(angle),
-            cy + radius * math.sin(angle),
-        )
-
-    def sector_path(inner_r: float, outer_r: float, start: float, end: float) -> str:
-        x1, y1 = polar(outer_r, start)
-        x2, y2 = polar(outer_r, end)
-        x3, y3 = polar(inner_r, end)
-        x4, y4 = polar(inner_r, start)
-        large = 1 if (end - start) > 180 else 0
-        return (
-            f"M {x1:.2f},{y1:.2f} "
-            f"A {outer_r},{outer_r} 0 {large},1 {x2:.2f},{y2:.2f} "
-            f"L {x3:.2f},{y3:.2f} "
-            f"A {inner_r},{inner_r} 0 {large},0 {x4:.2f},{y4:.2f} Z"
-        )
-
-    active_set = {str(group).strip().upper() for group in active_combo}
-    # Aktif kombinasyon yalnızca sektör rengini değiştirir.
-    # A1/B1/C1/D1 her zaman iç halkada; 4'lü gruplar dış halkada kalır.
-    svg_parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="{height}" viewBox="0 0 {width} {height}">',
-        '<rect width="100%" height="100%" fill="white"/>',
-        '<text x="390" y="34" text-anchor="middle" font-size="24" font-weight="800" fill="#123B6D">AYÇA Çembersel Grup ve Eşlenik Simülasyonu</text>',
-        '<text x="390" y="61" text-anchor="middle" font-size="13" fill="#667085">İç halkadan dış halkaya 1 → 2 → 3 → 4 alt grupları</text>',
-    ]
-
-    inner_radius = 0
-    for ring_index, outer_radius in enumerate(radii, start=1):
-        for region, (start_angle, end_angle) in region_angles.items():
-            group_name = f"{region}{ring_index}"
-            active = group_name in active_set
-            selected = group_name in selected_by_group
-
-            fill = region_colors[region] if active else "#FFFFFF"
-            fill_opacity = "0.95" if active else "1"
-            stroke = "#079455" if selected else "#101828"
-            stroke_width = "4" if selected else "2"
-
-            svg_parts.append(
-                f'<path d="{sector_path(inner_radius, outer_radius, start_angle, end_angle)}" '
-                f'fill="{fill}" fill-opacity="{fill_opacity}" stroke="{stroke}" stroke-width="{stroke_width}"/>'
-            )
-
-            label_radius = (inner_radius + outer_radius) / 2
-            label_angle = (start_angle + end_angle) / 2
-            lx, ly = polar(label_radius, label_angle)
-            text_color = "#FFFFFF" if active else "#123B6D"
-            count = int((pharmacies["group"] == group_name).sum())
-
-            svg_parts.append(
-                f'<text x="{lx:.2f}" y="{ly:.2f}" text-anchor="middle" '
-                f'font-size="14" font-weight="800" fill="{text_color}">{group_name}</text>'
-            )
-            svg_parts.append(
-                f'<text x="{lx:.2f}" y="{ly + 15:.2f}" text-anchor="middle" '
-                f'font-size="9" fill="{text_color}">{count} eczane</text>'
-            )
-
-        inner_radius = outer_radius
-
-    svg_parts.extend(
-        [
-            f'<text x="{cx - 285}" y="{cy - 285}" font-size="20" font-weight="800" fill="#38A3E1">A BÖLGESİ</text>',
-            f'<text x="{cx - 285}" y="{cy + 285}" font-size="20" font-weight="800" fill="#16C96F">B BÖLGESİ</text>',
-            f'<text x="{cx + 175}" y="{cy + 285}" font-size="20" font-weight="800" fill="#F39ACD">C BÖLGESİ</text>',
-            f'<text x="{cx + 175}" y="{cy - 285}" font-size="20" font-weight="800" fill="#B444ED">D BÖLGESİ</text>',
-            f'<circle cx="{cx}" cy="{cy}" r="20" fill="white" stroke="#101828" stroke-width="2"/>',
-            f'<text x="{cx}" y="{cy - 3}" text-anchor="middle" font-size="8" fill="#667085">AKTİF</text>',
-            f'<text x="{cx}" y="{cy + 9}" text-anchor="middle" font-size="7" font-weight="800" fill="#123B6D">GÜN</text>',
-        ]
-    )
-
-    panel_x = 720
-    svg_parts.append(
-        f'<rect x="{panel_x}" y="120" width="230" height="430" rx="18" fill="#F8FAFC" stroke="#D0D5DD"/>'
-    )
-    svg_parts.append(
-        f'<text x="{panel_x + 22}" y="160" font-size="17" font-weight="800" fill="#123B6D">Canlı Eşlenik Seçimi</text>'
-    )
-
-    for index, group_name in enumerate(active_combo):
-        y = 190 + index * 77
-        region = group_name[0]
-        selected_id = selected_by_group.get(group_name)
-        if selected_id is None:
-            selected_text = "Henüz seçilmedi"
-            sub_text = "Haritadan eczane seçin"
-        else:
-            match = pharmacies[pharmacies["pharmacy_id"] == int(selected_id)]
-            selected_text = (
-                str(match.iloc[0]["pharmacy_name"])
-                if not match.empty
-                else "Seçildi"
-            )
-            sub_text = "Seçim tamamlandı"
-
-        svg_parts.extend(
-            [
-                f'<rect x="{panel_x + 18}" y="{y}" width="194" height="62" rx="14" fill="white" stroke="#D0D5DD"/>',
-                f'<circle cx="{panel_x + 48}" cy="{y + 31}" r="18" fill="{region_colors[region]}"/>',
-                f'<text x="{panel_x + 48}" y="{y + 36}" text-anchor="middle" font-size="12" font-weight="800" fill="white">{group_name}</text>',
-                f'<text x="{panel_x + 78}" y="{y + 26}" font-size="12" font-weight="800" fill="#123B6D">{selected_text}</text>',
-                f'<text x="{panel_x + 78}" y="{y + 45}" font-size="10" fill="#98A2B3">{sub_text}</text>',
-            ]
-        )
-
-    svg_parts.append("</svg>")
-    return "".join(svg_parts)
+def build_group_svg(pharmacies: pd.DataFrame, active_groups: Iterable[str] | None = None, active_combo: Iterable[str] | None = None, **_: object) -> str:
+    active_source = active_groups if active_groups is not None else active_combo
+    active = {str(g).upper() for g in (active_source or [])}
+    colors = {"A": "#3B82F6", "B": "#22C55E", "C": "#EC4899", "D": "#8B5CF6"}
+    cells = []
+    x0, y0, size, gap = 18, 18, 122, 12
+    for r_idx, region in enumerate("ABCD"):
+        for ring in range(1, 5):
+            group = f"{region}{ring}"
+            x = x0 + (ring - 1) * (size + gap)
+            y = y0 + r_idx * (78 + gap)
+            count = int((pharmacies["group"] == group).sum()) if "group" in pharmacies else 0
+            fill = colors[region] if group in active else "#F8FAFC"
+            text = "#FFFFFF" if group in active else "#1B2B48"
+            stroke = colors[region]
+            cells.append(f'<rect x="{x}" y="{y}" width="{size}" height="78" rx="16" fill="{fill}" stroke="{stroke}" stroke-width="2"/>')
+            cells.append(f'<text x="{x+14}" y="{y+30}" font-size="18" font-weight="800" fill="{text}">{group}</text>')
+            cells.append(f'<text x="{x+14}" y="{y+55}" font-size="12" fill="{text}">{count} eczane</text>')
+    return f'<svg viewBox="0 0 570 380" width="100%" role="img" aria-label="16 alt grup yapısı">{"".join(cells)}</svg>'
 
 
-# ==========================================================
-# SUNUM / İLK TOPLANTI SİMÜLASYON METRİKLERİ
-# ==========================================================
 def build_simulation_summary(
     pharmacies: pd.DataFrame,
-    active_groups: tuple[str, str, str, str] | list[str],
-    selected_by_group: dict[str, int],
+    active_groups: Iterable[str],
+    selected_by_group: dict,
     candidates_by_group: dict[str, pd.DataFrame],
-) -> dict:
-    """
-    Mevcut karar motorunun çıktılarından, ilk toplantıda gösterilecek
-    sade ve anlaşılır performans özetini üretir.
-    """
-    total_candidates = 0
-    selectable_candidates = 0
-    blocked_candidates = 0
-    score_values: list[float] = []
-
-    for group_name in active_groups:
-        group_df = candidates_by_group.get(group_name, pd.DataFrame())
-        if group_df.empty:
-            continue
-
-        total_candidates += len(group_df)
-        selectable_candidates += int(group_df["selectable"].fillna(False).sum())
-        blocked_candidates += int((~group_df["selectable"].fillna(False)).sum())
-
-        valid_scores = pd.to_numeric(
-            group_df.loc[group_df["selectable"], "decision_score"],
-            errors="coerce",
-        ).dropna()
-        score_values.extend(valid_scores.astype(float).tolist())
-
+) -> dict[str, float | int]:
+    candidate_count = sum(len(df) for df in candidates_by_group.values())
+    rule_checks = candidate_count * 6
     selected_count = len(selected_by_group)
-    completed = selected_count == len(active_groups)
-
-    # Demo amacıyla gerçek aday sayısından türetilen, açıklanabilir metrikler.
-    rule_checks = total_candidates * 6
-    estimated_combinations = 1
-    for group_name in active_groups:
-        group_df = candidates_by_group.get(group_name, pd.DataFrame())
-        selectable_count = (
-            int(group_df["selectable"].fillna(False).sum())
-            if not group_df.empty
-            else 0
-        )
-        estimated_combinations *= max(1, selectable_count)
-
-    average_score = (
-        sum(score_values) / len(score_values)
-        if score_values
-        else 0.0
-    )
-
-    # Adalet skoru; uygunluk ortalaması ve atama tamamlama oranından oluşan
-    # sade bir sunum göstergesidir.
-    completion_ratio = selected_count / max(1, len(active_groups))
-    fairness_score = min(
-        100.0,
-        max(0.0, average_score * 0.75 + completion_ratio * 25),
-    )
-
-    estimated_seconds = round(
-        1.8 + total_candidates * 0.025 + len(active_groups) * 0.18,
-        1,
-    )
-
+    combinations = 1
+    for group in active_groups:
+        df = candidates_by_group.get(group, pd.DataFrame())
+        eligible = int(df["selectable"].sum()) if not df.empty and "selectable" in df else 0
+        combinations *= max(1, eligible)
+    scores = []
+    for df in candidates_by_group.values():
+        if not df.empty and "decision_score" in df:
+            scores.extend(df.loc[df["selectable"], "decision_score"].astype(float).tolist())
+    quality = round(sum(sorted(scores, reverse=True)[:4]) / max(1, min(4, len(scores))), 1) if scores else 0.0
     return {
-        "total_pharmacies": int(len(pharmacies)),
-        "total_groups": int(pharmacies["group"].nunique()),
-        "active_group_count": int(len(active_groups)),
-        "total_candidates": int(total_candidates),
-        "selectable_candidates": int(selectable_candidates),
-        "blocked_candidates": int(blocked_candidates),
-        "rule_checks": int(rule_checks),
-        "estimated_combinations": int(estimated_combinations),
-        "selected_count": int(selected_count),
-        "completed": bool(completed),
-        "average_candidate_score": round(float(average_score), 1),
-        "fairness_score": round(float(fairness_score), 1),
-        "estimated_seconds": float(estimated_seconds),
+        "pharmacy_count": len(pharmacies),
+        "candidate_count": candidate_count,
+        "rule_checks": rule_checks,
+        "estimated_combinations": combinations,
+        "selected_count": selected_count,
+        "estimated_seconds": round(max(0.4, candidate_count * 0.018), 1),
+        "quality_score": quality,
     }
 
 
@@ -775,58 +344,27 @@ def build_group_story(
     candidates: pd.DataFrame,
     selected_pharmacy_id: int | None = None,
 ) -> dict:
-    """
-    Bir aktif grubun toplantıda anlatılabilecek kısa karar hikâyesini üretir.
-    """
     if candidates.empty:
-        return {
-            "group": group_name,
-            "candidate_count": 0,
-            "selectable_count": 0,
-            "blocked_count": 0,
-            "selected_name": "Aday bulunamadı",
-            "selected_score": 0.0,
-            "reasons": [],
-        }
-
-    selectable = candidates[candidates["selectable"]].sort_values(
-        "decision_score",
-        ascending=False,
-    )
-    blocked = candidates[~candidates["selectable"]].copy()
-
-    selected_row = pd.DataFrame()
+        return {"group": group_name, "candidate_count": 0, "blocked_count": 0, "selectable_count": 0, "selected_name": "Aday yok", "selected_score": 0.0, "reasons": []}
+    selectable = candidates[candidates["selectable"]]
+    selected = pd.DataFrame()
     if selected_pharmacy_id is not None:
-        selected_row = candidates.loc[
-            candidates["pharmacy_id"].astype(int)
-            == int(selected_pharmacy_id)
-        ]
-
-    if selected_row.empty and not selectable.empty:
-        selected_row = selectable.head(1)
-
-    if selected_row.empty:
-        selected_name = "Henüz seçilmedi"
-        selected_score = 0.0
-    else:
-        selected_name = str(selected_row.iloc[0]["pharmacy_name"])
-        selected_score = float(selected_row.iloc[0]["decision_score"])
-
-    reason_rows = []
-    for row in blocked.head(4).itertuples():
-        reason_rows.append(
-            {
-                "pharmacy_name": str(row.pharmacy_name),
-                "reason": str(row.reason),
-            }
-        )
-
+        selected = candidates[candidates["pharmacy_id"].astype(int) == int(selected_pharmacy_id)]
+    if selected.empty and not selectable.empty:
+        selected = selectable.sort_values("decision_score", ascending=False).head(1)
+    selected_name = str(selected.iloc[0]["pharmacy_name"]) if not selected.empty else "Uygun aday bulunamadı"
+    selected_score = float(selected.iloc[0]["decision_score"]) if not selected.empty else 0.0
+    blocked = candidates[~candidates["selectable"]]
+    reasons = [
+        {"pharmacy_name": str(row.pharmacy_name), "reason": str(row.reason)}
+        for row in blocked.head(6).itertuples()
+    ]
     return {
         "group": group_name,
-        "candidate_count": int(len(candidates)),
-        "selectable_count": int(len(selectable)),
-        "blocked_count": int(len(blocked)),
+        "candidate_count": len(candidates),
+        "blocked_count": len(blocked),
+        "selectable_count": len(selectable),
         "selected_name": selected_name,
-        "selected_score": round(selected_score, 1),
-        "reasons": reason_rows,
+        "selected_score": selected_score,
+        "reasons": reasons,
     }
