@@ -1,8 +1,8 @@
-# AYÇA NÖBET SİMÜLATÖRÜ - v16.2
+# AYÇA NÖBET SİMÜLATÖRÜ - v16.3
 # Tarih navigasyonu ve takvim senkronizasyonu düzeltildi.
 
 # ==========================================================
-# AYÇA NÖBET SİMÜLATÖRÜ — v16.2
+# AYÇA NÖBET SİMÜLATÖRÜ — v16.3
 # Simülatör üstünde kompakt Sunumlar ve Dashboard butonları
 # ==========================================================
 
@@ -622,6 +622,87 @@ st.markdown(
         }
         section[data-testid="stSidebar"] {
             background: linear-gradient(180deg, #F8FAFD 0%, #F5F7FB 100%);
+        }
+
+
+        /* v16.3 — logo ve görünür hızlı erişim alanı */
+        .block-container {
+            padding-top: 2.4rem !important;
+        }
+
+        .ayca-logo-shell {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto 10px auto;
+            padding: 4px 12px;
+        }
+
+        .quick-actions-anchor {
+            height: 1px;
+            width: 1px;
+            overflow: hidden;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.quick-actions-anchor) {
+            align-items: center;
+            margin: 0 0 18px 0;
+            padding: 12px 14px;
+            border: 1px solid #DCE6F3;
+            border-radius: 18px;
+            background: linear-gradient(135deg, #F8FBFF 0%, #FFFFFF 100%);
+            box-shadow: 0 8px 22px rgba(16,24,40,.06);
+            position: relative;
+            z-index: 30;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.quick-actions-anchor)
+        div[data-testid="stButton"] > button {
+            min-height: 46px;
+            border-radius: 13px;
+            border: 1px solid #1D4ED8 !important;
+            background: linear-gradient(135deg, #123B6D, #2563EB) !important;
+            color: #FFFFFF !important;
+            font-weight: 900 !important;
+            box-shadow: 0 8px 18px rgba(37,99,235,.20);
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.quick-actions-anchor)
+        div[data-testid="stButton"] > button p {
+            color: #FFFFFF !important;
+            font-weight: 900 !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.quick-actions-anchor)
+        div[data-testid="stLinkButton"] > a {
+            min-height: 46px;
+            border-radius: 13px;
+            border: 1px solid #059669 !important;
+            background: linear-gradient(135deg, #047857, #10B981) !important;
+            color: #FFFFFF !important;
+            font-weight: 900 !important;
+            box-shadow: 0 8px 18px rgba(16,185,129,.20);
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.quick-actions-anchor)
+        div[data-testid="stLinkButton"] > a p {
+            color: #FFFFFF !important;
+            font-weight: 900 !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.quick-actions-anchor)
+        button:hover,
+        div[data-testid="stHorizontalBlock"]:has(.quick-actions-anchor)
+        a:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.04);
+        }
+
+        @media (max-width: 900px) {
+            .block-container { padding-top: 1.5rem !important; }
+            div[data-testid="stHorizontalBlock"]:has(.quick-actions-anchor) {
+                padding: 10px;
+            }
         }
 
     </style>
@@ -2017,10 +2098,35 @@ mode_text = (
     else "Otomatik çok günlük plan"
 )
 
-# Simülatör başlığının hemen üzerinde görünür hızlı erişim butonları.
-quick_spacer, quick_presentation, quick_dashboard = st.columns(
-    [5.6, 1.2, 1.2], gap="small"
+# ==========================================================
+# LOGO VE HIZLI ERİŞİM ALANI
+# ==========================================================
+LOGO_PATH = Path(__file__).with_name("ayca-logo.png")
+
+if LOGO_PATH.exists():
+    logo_left, logo_center, logo_right = st.columns([1.25, 5.5, 1.25])
+    with logo_center:
+        st.markdown('<div class="ayca-logo-shell">', unsafe_allow_html=True)
+        st.image(
+            str(LOGO_PATH),
+            use_container_width=True,
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+else:
+    st.warning(
+        "AYÇA logosu bulunamadı. ayca-logo.png dosyasını app.py ile aynı klasöre yükleyin."
+    )
+
+# Butonlar logo ile simülatör başlığı arasında, görünür ve kompakt tutulur.
+quick_anchor, quick_presentation, quick_dashboard = st.columns(
+    [5.0, 1.5, 1.5],
+    gap="small",
 )
+with quick_anchor:
+    st.markdown(
+        '<div class="quick-actions-anchor"></div>',
+        unsafe_allow_html=True,
+    )
 with quick_presentation:
     st.button(
         "📽️ Sunumlar",
