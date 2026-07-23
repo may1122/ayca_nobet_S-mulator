@@ -720,8 +720,8 @@ DASHBOARD_URL = (
 )
 
 PRESENTATIONS = {
-    "Giresun Eczacı Odası Sunumu": Path(__file__).with_name(
-        "giresun_ayca_sunum.pdf"
+    "Eczacı Odası Sunumu": Path(__file__).with_name(
+        "ayca_sunum.pdf"
     ),
     "AYÇA Genel Tanıtım Sunumu": Path(__file__).with_name(
         "ayca_genel_sunum.pdf"
